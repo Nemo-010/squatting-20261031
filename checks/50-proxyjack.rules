@@ -1,0 +1,53 @@
+## auditd rules for detecting proxy / tunnel / relay squatting.
+## Install as /etc/audit/rules.d/50-proxyjack.rules then: augenrules --load
+##
+## Two syntax traps, both of which make this file useless if ignored:
+##   * the architecture field is "arch", not "ar". A rule using -F ar fails with
+##     "-F missing operation for ar" and augenrules aborts after the -D has
+##     already cleared the ruleset.
+##   * -F path= is not recursive and requires the inode to exist at load time.
+##     For directories use -F dir=, which is a subtree watch.
+## arch must precede -S as the field parser needs it for syscall numbering.
+
+-D
+-b 8192
+--backlog_wait_time 60000
+-f 1
+
+## socket() carries no saddr_fam; match the family in a0 (2 = AF_INET, 10 = AF_INET6)
+-a always,exit -F arch=b64 -S socket -F a0=2  -k net_socket
+-a always,exit -F arch=b64 -S socket -F a0=10 -k net_socket
+
+## connections, both families
+-a always,exit -F arch=b64 -S connect,bind -F saddr_fam=2  -k net_conn
+-a always,exit -F arch=b64 -S connect,bind -F saddr_fam=10 -k net_conn
+
+## tunnel/VPN interface creation: ioctl(fd, TUNSETIFF, &ifr) = 0x400454ca
+-a always,exit -F arch=b64 -S ioctl -F a1=0x400454ca -k tun_ioctl
+
+## new network namespace
+-a always,exit -F arch=b64 -S clone -F a0&0x40000000 -k ns_net
+-a always,exit -F arch=b64 -S unshare,setns -k ns_change
+
+## anonymous-memory payloads.
+## execveat()'s flags live in a4, and auditd exposes only a0..a3, so the AT_EMPTY_PATH
+## case cannot be matched here. memfd_create plus the /proc sweep in triage.sh covers it.
+-a always,exit -F arch=b64 -S memfd_create -k memfd
+
+## preload surface; replaces a -w /etc/ld.so.preload watch, which fails on a host
+## where the file does not exist at rule-load time
+-a always,exit -F arch=b64 -F dir=/etc -F perm=wa -k etc_write
+
+## persistence - dir= subtree, not path= on the directory itself
+-a always,exit -F arch=b64 -F dir=/etc/cron.d -F perm=wa -k persist
+-a always,exit -F arch=b64 -F dir=/var/spool/cron -F perm=wa -k persist
+-a always,exit -F arch=b64 -F dir=/etc/systemd/system -F perm=wa -k persist
+
+## module load
+-a always,exit -F arch=b64 -S init_module,finit_module -k kmod
+
+## io_uring bypass path; needs kernel >= 5.16 and audit >= 3.1, takes no arch field
+-a always,io_uring -S openat,openat2 -F key=access_uring
+
+## immutable until reboot. Check the ruleset first: auditctl -l
+-e 2

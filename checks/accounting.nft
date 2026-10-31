@@ -1,0 +1,15 @@
+# Per-UID egress accounting with no daemon: one dynamic-set element per UID seen.
+# Install:  nft -f checks/accounting.nft
+# Read:     nft -j list set inet acct suids
+# Reset:    nft reset counters set inet acct suids
+table inet acct {
+	set suids {
+		type uid
+		flags dynamic
+	}
+
+	chain out {
+		type filter hook output priority 0; policy accept;
+		update @suids { meta skuid counter }
+	}
+}

@@ -1,0 +1,6 @@
+[Unit]
+Description=per-unit egress sampler
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/egress-watch

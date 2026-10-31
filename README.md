@@ -1,0 +1,98 @@
+# Squatting a server
+
+**Proxy, VPN, torrent and notebook workloads that run on other people's cloud hosts — what they are,
+why they stay hidden, and how to find them on one box without buying anything.**
+
+A technical reference for operators. Fifteen deep dives plus a consolidated report, sourced to kernel
+source, RFCs, man pages, vendor documentation and published threat intelligence, and a set of runnable
+checks.
+
+- **[REPORT.md](REPORT.md)** — the consolidated document. Start here.
+- **[research/](research/)** — the deep dives, one per niche.
+- **[checks/](checks/)** — runnable scripts for the cheapest detection tiers. Most are read-only; two
+  are meant to be installed.
+- **[LICENSE](LICENSE)** — 0BSD. Copy it, fork it, resell it, no attribution needed.
+
+## The 10-minute version
+
+On a Linux host you control, these four commands cover most of it:
+
+```sh
+# binaries running from writable or anonymous memory
+for p in /proc/[0-9]*; do
+  pid=${p#/proc/}; exe=$(readlink "$p/exe" 2>/dev/null) || continue
+  case $exe in
+    */tmp/*|*/var/tmp/*|*/dev/shm/*|*/run/*|*/.cache/*|*"(deleted)"|/memfd:*) echo "$pid $exe" ;;
+  esac
+done
+
+# tunnels dial out; cloudflared never listens on 7844
+ss -tnp state established '( dport = :7844 or sport = :7844 )'
+
+# any content here is a finding
+cat /etc/ld.so.preload
+
+# the one-click installers leave their config layout behind
+find / -name '*_inbounds.json' 2>/dev/null
+```
+
+If you want history instead of a snapshot, the single most useful control is per-unit egress
+accounting — `systemctl show <unit> -p IPEgressBytes` — and the single most useful *control* is
+default-deny egress in systemd (`IPAddressDeny=any` on a slice, allow-list per service).
+
+## What the corpus covers
+
+**The abuse side** — proxyjacking and its unit economics (MITRE T1496.002); the self-service relay
+stack (Xray/sing-box/hysteria behind `cloudflared`, frp, chisel, ngrok) and the on-disk layout the
+one-click installers leave behind; the Chinese-language ecosystem, its panel software (V2board, Xboard,
+XrayR) and the Cloudflare-workers branch with its documented limits; a free-tier inventory with the
+published allowance for each platform; Jupyter notebooks as the instrument of choice, with six
+documented intrusion chains; torrent ratio farming; bandwidth resale (restreaming, subscription
+markets); and the adjacent roles a borrowed box gets drafted into — open relays, amplification
+reflectors, Tor exits, CI runners, remote desktops.
+
+**The evasion side** — why egress-only multiplexed TLS defeats network detection (no listener, CDN
+destination, one flow, 100–1000 byte padding, tiny per-host volume, legitimate binaries); why the
+obvious detection layers are blind by construction (`-m owner` cannot see forwarded packets,
+`meta cgroup` reads a cgroup v1 attribute, containers have their own netns); what the other detector in
+the path is (the censor-side classifier that the protocol design is actually aimed at); and what
+happens when the compromised host is made to lie — `LD_PRELOAD` filtering of `/proc/net/tcp`, `ss`
+versus procfs, `tcpdump` hooked through libpcap.
+
+**The detection side** — cheapest first: `/proc` forensics with no packages, systemd and nftables and
+conntrack accounting and what each cannot see, one auditd rule file, bpftrace/Tetragon/Tracee probes
+with measured overhead, constant-offset flow signatures (BitTorrent, DHT, uTP, SOCKS5, stratum),
+external vantage (Tor, Onionoo, Shodan InternetDB, Certificate Transparency, passive DNS, blocklists),
+honeypots/canaries for catching the entry rather than the workload, plus a containment section
+(default-deny egress, rate ceilings, capability removal, closing the SSH forwarding door) and an
+evidence-first playbook for what to do once something is found.
+
+## The short answer to "why are they not detected"
+
+They are — late, and by accounting rather than by security tooling. A squat becomes visible when it
+crosses an egress allowance or when someone complains about the exit IP, which is why the business
+model is account churn. On a host you control, the asymmetry favours you if you invert it: make the
+account expensive to replace and cap the outflow, rather than trying to identify a tunnel on the wire.
+
+No layer described here can distinguish a padded TLS tunnel from a legitimate HTTPS client. Every one
+of them measures bytes and processes; none measures intent. What holds up is correlation — an egress
+trend that does not match the unit's declared purpose, plus a binary that lives somewhere writable,
+plus a session that never accepts, plus a listener inventory that disagrees with itself.
+
+## Scope and method
+
+Sources are primary where possible: kernel source and UAPI headers, docs.kernel.org, man7.org,
+authoritative project documentation, RFCs, MITRE ATT&CK, cloud provider pricing and policy pages, and
+vendor threat-intelligence write-ups. Load-bearing numbers were re-checked first-hand against the
+source rather than relayed; anything that could not be confirmed is marked `unverified` in the
+relevant file, and each deep dive ends with a "What I could not verify" section.
+
+Numbers that carry a timestamp (blocklist sizes, exit-node counts, pricing) were measured on
+2026-10-31 and will drift.
+
+Descriptions of intrusions are limited to what has been published in threat-intelligence reporting;
+the files describe detection, not exploitation.
+
+## License
+
+0BSD. See [LICENSE](LICENSE).
