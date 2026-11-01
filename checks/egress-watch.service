@@ -1,6 +1,10 @@
 [Unit]
-Description=per-unit egress sampler
+Description=per-unit and whole-host egress sampler
+Documentation=file:/usr/local/share/doc/squatting/HARDENING.md
 
 [Service]
 Type=oneshot
+# EGRESS_THRESHOLD (bytes per interval), EGRESS_MISMATCH (unattributed bytes),
+# EGRESS_WARN_RESET (0 to silence counter-reset warnings).
+EnvironmentFile=-/etc/default/egress-watch
 ExecStart=/usr/local/bin/egress-watch

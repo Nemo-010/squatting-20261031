@@ -1,9 +1,10 @@
 [Unit]
-Description=run the per-unit egress sampler every 5 minutes
+Description=run the egress sampler every 5 minutes
 
 [Timer]
 OnBootSec=5min
 OnUnitActiveSec=5min
+RandomizedDelaySec=30s
 
 [Install]
 WantedBy=timers.target

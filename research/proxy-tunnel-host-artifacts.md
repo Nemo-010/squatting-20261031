@@ -1,5 +1,9 @@
 # Host-artifact detection for proxy / tunnel / torrent software on a single Linux server
 
+> **Hardened 2026-11-01 — adversarial review: D01, D03, D06, D08.** The staging-directory whitelist, the build-metadata attribution and the port table were all refuted: a payload under `$HOME/.local`, in `/opt` or in `site-packages` is invisible to the old sweep, a stripped C binary has no module graph, and every port is a configurable default. The rewritten `checks/triage.sh` classifies image writability, reads inline interpreters and anonymous exec mappings, and prints the package owner of every listener.
+> The corrected checks and the residual bypasses are in
+> [HARDENING.md](../HARDENING.md). Read that before relying on the commands below.
+
 *Slice: what a root shell and `/proc` can tell you about proxyjacking, tunnel squatting and notebook abuse — process identity, socket tables, container namespaces, config-file sweeps and vendor-published IoCs. Zero-cost tooling only.*
 
 ---

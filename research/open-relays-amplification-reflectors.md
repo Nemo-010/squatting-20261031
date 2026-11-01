@@ -1,5 +1,9 @@
 # Open Relays and Amplification Reflectors: What Makes a Host Usable, and What It Looks Like From Inside
 
+> **Hardened 2026-11-01 — adversarial review: D55.** The SMTP self-test covers open SMTP only: API mail (SendGrid/SES/Telegram/Discord over 443) has no SMTP socket. A resolver restricted to a trusted list still recurses for a tenant, so a probe that returns REFUSED does not mean the resolver is closed.
+> The corrected checks and the residual bypasses are in
+> [HARDENING.md](../HARDENING.md). Read that before relying on the commands below.
+
 Scope: a free-tier server gets repurposed with almost no tooling — as an *egress* (SMTP open relay,
 HTTP/SOCKS proxy) or as an *amplifier* (DNS, NTP, memcached, chargen, SSDP, CLDAP), where its only
 contribution is answering a spoofed UDP packet with a larger one. This file covers the precondition

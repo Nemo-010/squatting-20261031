@@ -1,5 +1,9 @@
 # Torrent Seedbox Detection on a Cloud Host
 
+> **Hardened 2026-11-01 — adversarial review: D33, D34, D52.** The constants catch default clients: MSE/PE `required` and a private tracker with DHT/PEX/LSD off erase them. The non-443 clause in the shape heuristic was the only specific part and is under the attacker's control. A private seedbox inside a provider's allowance is a known limitation: it is indistinguishable from a legitimate mirror.
+> The corrected checks and the residual bypasses are in
+> [HARDENING.md](../HARDENING.md). Read that before relying on the commands below.
+
 Scope: a box turned into a BitTorrent seeder — `qbittorrent-nox`, `transmission-daemon`, `deluged`,
 `rtorrent`, `aria2c` in BT mode — either because the account holder is farming upload credit for a private
 tracker, or because something else put a client there. Covers: handshake bytes, DHT KRPC, uTP, tracker

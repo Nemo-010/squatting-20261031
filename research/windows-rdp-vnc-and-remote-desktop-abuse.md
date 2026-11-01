@@ -1,5 +1,9 @@
 # Windows RDP, VNC and Remote-Desktop Abuse: What an Exposed Desktop Announces, Who Guesses At It, and How to Prove the Session Isn't Yours
 
+> **Hardened 2026-11-01 — adversarial review: D54.** The listener and configuration checks are exact. The behavioural half cannot separate a valid RDP logon from a valid RDP logon: type 10 is what every legitimate session is, and an administrator who owns the host owns the event log. Known limitation.
+> The corrected checks and the residual bypasses are in
+> [HARDENING.md](../HARDENING.md). Read that before relying on the commands below.
+
 Scope: this file covers one slice — the desktop protocols themselves (Microsoft RDP on 3389/TCP and 3389/UDP, RFB/VNC on 5900+n, Apache Guacamole's `guacd` on 4822, and `xrdp` as the Linux bridge that speaks RDP), the credential-guessing traffic that finds them, the Windows-family payloads that run on a desktop somebody else paid for (XMRig-class miners, proxyware/residential-proxy clients, remote-access tools), and — the bulk of it — the checks a single Linux or Windows operator can run on their own box to prove a session is not theirs. It closes with the "free VPS hunting" pattern: accounts created in bulk on free tiers to hold a remote desktop.
 
 ## Summary

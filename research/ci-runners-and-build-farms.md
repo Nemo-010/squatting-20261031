@@ -1,5 +1,9 @@
 # CI Runners and Build Farms: Freejacking, Install-Time Egress, and Detecting an Ephemeral Runner
 
+> **Hardened 2026-11-01 — adversarial review: D53.** A self-hosted runner is a legitimate runner: unsetting `GITHUB_ACTIONS` and running detached defeats the name, env and cgroup checks, and the `meta` IP ranges only answer whether the traffic came from GitHub-hosted infrastructure. This is a known limitation, not a detection.
+> The corrected checks and the residual bypasses are in
+> [HARDENING.md](../HARDENING.md). Read that before relying on the commands below.
+
 **Scope.** The CI/CD compute layer as an abused resource: GitHub Actions and GitLab CI hosted runners, self-hosted runner agents on machines that should not have them, and the install-time path (npm/pnpm/Yarn/Bun/pip lifecycle scripts) that turns a build into an egress event. Two questions: *is the traffic hitting my service coming from a CI runner*, and *is there a runner on this machine doing something I did not schedule?*
 
 ## Summary

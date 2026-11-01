@@ -1,5 +1,9 @@
 # Streaming, IPTV and sold bandwidth: ffmpeg restream fan-out, 机场 subscription resale, seedbox slots, and the traffic that gives them away
 
+> **Hardened 2026-11-01 — adversarial review: D56.** The origin counters are the only strong item and exist only when the operator's media server is the origin. A push to a CDN moves the fan-out off the host, `ffmpeg -i -` removes the URL from the command line, and variable-bitrate encoding removes the metronome.
+> The corrected checks and the residual bypasses are in
+> [HARDENING.md](../HARDENING.md). Read that before relying on the commands below.
+
 This file covers the slice of server repurposing where the *product* is video or raw bytes rather than compute: a box that pulls a live feed and re-publishes it (RTMP/RTMPS, HTTP-FLV, HLS, SRT), a box that terminates hundreds of short-lived client pulls of one origin playlist (the IPTV-panel shape), a box sold as a "机场" (airport) subscription node or a seedbox slot, and a box that simply sells its uplink to a bandwidth marketplace. The common thread is that the abuse is *bandwidth-shaped*: CPU stays near idle because audio and video are remuxed with `-c copy` rather than re-encoded, disk barely moves, and the only thing that changes is a flat, unvarying egress curve plus an odd concurrency profile on a handful of ports. Everything below is written from the operator's side of the wire.
 
 ## Summary — the load-bearing findings

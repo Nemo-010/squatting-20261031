@@ -1,5 +1,9 @@
 # Network-Flow Heuristics for Detecting Proxyjacking, Tunnel Squatting and Torrent Abuse on One Linux Server
 
+> **Hardened 2026-11-01 — adversarial review: D31, D32, D35, D36, D37, D38.** JA4 is a library fingerprint and uTLS/REALITY make it match a browser or a borrowed site; it is a known limitation, not a control. The packet constants catch default configurations only. `checks/network-gaps.sh` adds HTTP CONNECT, DoH/DoT and ICMP, which this file did not cover. `capture_loss` measures the sensor's own coverage, not the network's.
+> The corrected checks and the residual bypasses are in
+> [HARDENING.md](../HARDENING.md). Read that before relying on the commands below.
+
 Free/open-source only. BPF filters were syntax-checked by compiling them with `pcap_compile()` against libpcap; version numbers come from upstream docs or the projects' field references.
 
 ## Summary

@@ -1,0 +1,82 @@
+#!/usr/bin/env bpftrace
+/*
+ * Hardened probe set for the gaps D19/D25/D27 named.
+ *
+ *   bpftrace checks/probes.bt
+ *
+ * Additions over the syscall-entry set in the report:
+ *   - execveat, which is how a memfd payload actually runs (fexecve, AT_EMPTY_PATH);
+ *   - clone3 with CLONE_NEWNET / CLONE_NEWUSER, which audit cannot filter because
+ *     the flags live in struct clone_args behind a pointer;
+ *   - io_uring_setup, the ring creation that every io_uring bypass needs;
+ *   - udp_sendmsg, because a QUIC/hysteria2/dnstt client never calls tcp_connect.
+ *
+ * Status: syntax follows bpftrace 0.20 and the tracepoint field names in
+ * include/trace/events/syscalls.h and io_uring/opdef.c. It was not executed in the
+ * environment this corpus was hardened in (no bpftrace there). Run
+ * `bpftrace -d checks/probes.bt` first and check the probe list before relying on it.
+ *
+ * What it still cannot see: io_uring SEND/RECV/SENDMSG payload volume (the opcodes
+ * are audit_skip and never enter the syscall path), and anything the kernel hides
+ * from an eBPF program attached after the attacker's own program.
+ */
+
+BEGIN
+{
+	printf("%-6s %-16s %s\n", "PROBE", "COMM", "DETAIL");
+}
+
+tracepoint:syscalls:sys_enter_execve
+{
+	printf("%-6s %-16s pid=%-6d %s\n", "exec", comm, pid, str(args->filename));
+}
+
+tracepoint:syscalls:sys_enter_execveat
+{
+	printf("%-6s %-16s pid=%-6d fd=%d flags=%d %s\n", "execat", comm, pid,
+	       args->fd, args->flags,
+	       args->filename ? str(args->filename) : "<AT_EMPTY_PATH>");
+}
+
+tracepoint:syscalls:sys_enter_clone3
+{
+	$a = (struct clone_args *)args->uargs;
+	if ($a->flags & 0x40000000)
+		printf("%-6s %-16s pid=%-6d CLONE_NEWNET\n", "ns", comm, pid);
+	if ($a->flags & 0x10000000)
+		printf("%-6s %-16s pid=%-6d CLONE_NEWUSER\n", "userns", comm, pid);
+}
+
+tracepoint:syscalls:sys_enter_io_uring_setup
+{
+	printf("%-6s %-16s pid=%-6d entries=%d\n", "uring", comm, pid, args->entries);
+}
+
+kprobe:tcp_connect
+{
+	$sk = (struct sock *)arg0;
+	if ($sk->__sk_common.skc_family == 2)
+		printf("%-6s %-16s pid=%-6d %s:%d -> %s:%d\n", "tcp", comm, pid,
+		       ntop($sk->__sk_common.skc_rcv_saddr), $sk->__sk_common.skc_num,
+		       ntop($sk->__sk_common.skc_daddr), bswap($sk->__sk_common.skc_dport));
+	if ($sk->__sk_common.skc_family == 10)
+		printf("%-6s %-16s pid=%-6d [%s]:%d -> [%s]:%d\n", "tcp6", comm, pid,
+		       ntop($sk->__sk_common.skc_v6_rcv_saddr.in6_u.u6_addr32),
+		       $sk->__sk_common.skc_num,
+		       ntop($sk->__sk_common.skc_v6_daddr.in6_u.u6_addr32),
+		       bswap($sk->__sk_common.skc_dport));
+}
+
+kprobe:udp_sendmsg
+{
+	$sk = (struct sock *)arg0;
+	if ($sk->__sk_common.skc_family == 2)
+		printf("%-6s %-16s pid=%-6d %s -> %s:%d\n", "udp", comm, pid,
+		       ntop($sk->__sk_common.skc_rcv_saddr),
+		       ntop($sk->__sk_common.skc_daddr), bswap($sk->__sk_common.skc_dport));
+	if ($sk->__sk_common.skc_family == 10)
+		printf("%-6s %-16s pid=%-6d [%s] -> [%s]:%d\n", "udp6", comm, pid,
+		       ntop($sk->__sk_common.skc_v6_rcv_saddr.in6_u.u6_addr32),
+		       ntop($sk->__sk_common.skc_v6_daddr.in6_u.u6_addr32),
+		       bswap($sk->__sk_common.skc_dport));
+}

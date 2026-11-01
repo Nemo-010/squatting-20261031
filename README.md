@@ -8,6 +8,8 @@ source, RFCs, man pages, vendor documentation and published threat intelligence,
 checks.
 
 - **[REPORT.md](REPORT.md)** — the consolidated document. Start here.
+- **[HARDENING.md](HARDENING.md)** — the adversarial review, issue by issue: what was fixed, what was
+  corrected, and the eight detections that cannot be separated from legitimate use.
 - **[research/](research/)** — the deep dives, one per niche.
 - **[checks/](checks/)** — runnable scripts for the cheapest detection tiers. Most are read-only; two
   are meant to be installed.
@@ -18,18 +20,13 @@ checks.
 
 ## The 10-minute version
 
-On a Linux host you control, these four commands cover most of it:
+On a Linux host you control, start with the script and keep these three commands for a box where you
+cannot run it:
 
 ```sh
-# binaries running from writable or anonymous memory
-for p in /proc/[0-9]*; do
-  pid=${p#/proc/}; exe=$(readlink "$p/exe" 2>/dev/null) || continue
-  case $exe in
-    */tmp/*|*/var/tmp/*|*/dev/shm/*|*/run/*|*/.cache/*|*"(deleted)"|/memfd:*) echo "$pid $exe" ;;
-  esac
-done
+sudo sh checks/triage.sh
 
-# tunnels dial out; cloudflared never listens on 7844
+# tunnels dial out; 7844 is one vendor's edge, not the family
 ss -tnp state established '( dport = :7844 or sport = :7844 )'
 
 # any content here is a finding
@@ -39,9 +36,15 @@ cat /etc/ld.so.preload
 find / -name '*_inbounds.json' 2>/dev/null
 ```
 
-If you want history instead of a snapshot, the single most useful control is per-unit egress
-accounting — `systemctl show <unit> -p IPEgressBytes` — and the single most useful *control* is
-default-deny egress in systemd (`IPAddressDeny=any` on a slice, allow-list per service).
+These are leads, not a verdict: a payload installed with `pip --user` lives in a directory the old
+snippet did not look at, and `python3 -c` has no image to find. `checks/triage.sh` reports the
+processes it could not inspect, so a non-root run does not read as a clean host.
+
+If you want history instead of a snapshot, the single most useful *measurement* is per-unit egress
+accounting — `systemctl show <unit> -p IPEgressBytes` — summed with the scopes and slices the unit did
+not create, and the single most useful *control* is default-deny egress in systemd (`IPAddressDeny=any`
+on a slice, allow-list per service). Do not allow a resolver in that list: a resolver is a general
+purpose tunnel egress.
 
 ## What the corpus covers
 
@@ -80,7 +83,9 @@ account expensive to replace and cap the outflow, rather than trying to identify
 No layer described here can distinguish a padded TLS tunnel from a legitimate HTTPS client. Every one
 of them measures bytes and processes; none measures intent. What holds up is correlation — an egress
 trend that does not match the unit's declared purpose, plus a binary that lives somewhere writable,
-plus a session that never accepts, plus a listener inventory that disagrees with itself.
+plus a listener inventory that disagrees with itself. Even that combination is legitimate for a private
+seedbox, a self-hosted CI runner or a real remote desktop, which is why those are recorded as known
+limitations in `HARDENING.md` rather than as detections.
 
 ## Scope and method
 

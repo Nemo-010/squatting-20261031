@@ -1,5 +1,9 @@
 # Per-process and per-user network accounting on one Linux host: what actually measures a quiet proxy relay
 
+> **Hardened 2026-11-01 — adversarial review: D12, D13, D14, D15, D16.** The conntrack asymmetry inference is withdrawn: reply-heavy is a download, and a relay is often balanced. `checks/egress-watch.sh` samples services, scopes and slices, warns on counter resets, and compares the sum of unit deltas against the host interface counter. `meta skuid` is an inventory, not attribution: it is blind to another netns and uid 0 is one bucket.
+> The corrected checks and the residual bypasses are in
+> [HARDENING.md](../HARDENING.md). Read that before relying on the commands below.
+
 The question this answers: *who on this box is pushing traffic I did not sanction?* Not "is there a
 malicious packet" — a CDN-fronted tunnel has no malicious packet — but "which UID, cgroup or process
 produced these bytes". Everything below is available on a stock Linux server with packages from the

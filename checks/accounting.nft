@@ -2,14 +2,36 @@
 # Install:  nft -f checks/accounting.nft
 # Read:     nft -j list set inet acct suids
 # Reset:    nft reset counters set inet acct suids
+#
+# What this measures, and what it does not (D13):
+#   * `meta skuid` needs skb_to_full_sk(), sk_fullsock() and a socket in *this*
+#     netns. A relay inside a container on its own netns never matches, and the
+#     counter for that UID stays still.
+#   * forwarded traffic has no originating socket, so it has no UID. The forward
+#     chain below counts it per output interface instead; that is the only handle
+#     netfilter has on a routed packet.
+#   * uid 0 is one bucket. On a normal host it carries package downloads, image
+#     pulls and log shipping, so 40 GiB on uid 0 is not evidence of anything.
+#     Use it as an inventory ("which UID moved bytes"), not as attribution.
+#   * `nft flush ruleset` from root removes this table.
 table inet acct {
 	set suids {
 		type uid
 		flags dynamic
 	}
 
+	set oifaces {
+		type ifname
+		flags dynamic
+	}
+
 	chain out {
 		type filter hook output priority 0; policy accept;
 		update @suids { meta skuid counter }
+	}
+
+	chain forwarded {
+		type filter hook forward priority 0; policy accept;
+		update @oifaces { meta oifname counter }
 	}
 }

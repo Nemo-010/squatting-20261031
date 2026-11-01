@@ -1,5 +1,9 @@
 # External vantage and entry-catching: what the outside sees, and cheap tripwires for what gets in
 
+> **Hardened 2026-11-01 — adversarial review: D40, D41, D42, D44, D45, D46, D47.** The outside view answers exposure, not relay use: a dial-out-only relay publishes nothing to scan and needs no name. Honeypots catch the entry, not the workload. `chattr +i` is a deletion guard, `systemd.path` stops watching after its trigger limit unless the limits are zeroed, and audit read watches lose to `mmap` and io_uring `READV`.
+> The corrected checks and the residual bypasses are in
+> [HARDENING.md](../HARDENING.md). Read that before relying on the commands below.
+
 Scope: two views of one box you own. **Outside-in** — asking third parties (Shodan, Censys, Certificate Transparency, passive DNS, ASN registry, blocklists) what a stranger already knows about your IP: ports you did not open, hostnames in certificates you never issued, domains pointing at you that you do not control. **Entry-catching** — tripwires that fire when someone arrives: an endlessh SSH tarpit, a Cowrie honeypot, canarytokens, fake credentials, immutable-file semantics, `systemd.path` watchers and `auditd` read rules, alerting via ntfy/healthchecks/Telegram with no SIEM. Spamhaus/AbuseIPDB taxonomy lives in `tor-exit-relays-and-IP-reputation.md`; egress flow analysis in `network-flow-heuristics-proxyjacking.md`. Measurements are from 2026-10-31 in this sandbox; nothing was installed and no firewall or sysctl state changed.
 
 ## Summary

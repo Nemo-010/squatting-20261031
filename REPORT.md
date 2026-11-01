@@ -333,29 +333,33 @@ Full detail and sources in `research/`. Runnable forms in `checks/`.
 
 ### Tier 0 — ten minutes, nothing installed
 
-Base `procps` + `iproute2` + `coreutils`. This finds most real squats because the binary path is much
-harder to fake than the process name.
+Base `procps` + `iproute2` + `coreutils`. This is a triage aid, not a detector. The binary path is
+harder to fake than the process name, but it is not identity either: `pip install --user` puts a
+payload in a directory this snippet does not list, and `python3 -c` has no payload image at all.
+`checks/triage.sh` is the hardened version of this tier and reports the processes it could not read.
 
 ```sh
-# binaries running from writable or anonymous memory
+# images under staging paths, plus interpreters running inline code
 for p in /proc/[0-9]*; do
   pid=${p#/proc/}
   exe=$(readlink "$p/exe" 2>/dev/null) || continue
   case $exe in
-    */tmp/*|*/var/tmp/*|*/dev/shm/*|*/run/*|*/home/*/.cache/*|*"(deleted)"|/memfd:*)
+    */tmp/*|*/var/tmp/*|*/dev/shm/*|*/run/*|*/home/*/.cache/*|*"(deleted)"*|/memfd:*)
       printf '%-7s %-50s %s\n' "$pid" "$exe" "$(tr '\0' ' ' < "$p/cmdline")" ;;
+  esac
+  case ${exe##*/} in
+    python*|node|perl|ruby|php*|java)
+      tr '\0' '\n' < "$p/cmdline" | grep -qxE -- '-c|-e|-m|--eval|-jar' &&
+        printf '%-7s inline code through %s: %s\n' "$pid" "${exe##*/}" "$(tr '\0' ' ' < "$p/cmdline")" ;;
   esac
 done
 
-ss -Htnp state established '( dport = :7844 or sport = :7844 )'   # cloudflared dials 7844
-ss -Htup                                                           # QUIC, uTP, WireGuard
+ss -Htnp state established '( dport = :7844 or sport = :7844 )'   # one vendor's edge, not the family
+ss -Hunp                                                           # QUIC, uTP, WireGuard, DHT
 cat /etc/ld.so.preload 2>/dev/null                                 # any content is a finding
 
 find / -name '*_inbounds.json' 2>/dev/null                         # one-click installer layout
 for n in /proc/[0-9]*/ns/net; do readlink "$n"; done | sort -u     # distinct netns
-nsenter -t <pid> -n -- ss -Htulpn
-docker inspect --format '{{.Name}} net={{.HostConfig.NetworkMode}} priv={{.HostConfig.Privileged}}' \
-  $(docker ps -q)
 ```
 
 Three signals to act on:
@@ -366,6 +370,10 @@ Three signals to act on:
 - a `readdir("/proc")` that returns fewer numeric entries than `/proc/<pid>` directories that `stat`
   can reach. (Measured false-positive mode: this also happens benignly, so treat it as a prompt to
   switch to netlink, not as proof.)
+
+The third one is a name check, and a name is not identity: the same process can be called `sshd` and
+nothing on the host will disagree. Read the first two as leads and the process image plus its package
+owner as the finding.
 
 `/proc/<pid>/exe` is not *unforgeable* — `prctl(PR_SET_MM_EXE_FILE)` repoints it, and a `memfd`
 payload shows as `/memfd:name (deleted)`. But repointing needs `CAP_SYS_RESOURCE`, so where tenants are
@@ -394,15 +402,27 @@ table inet acct {
     set suids { type uid; flags dynamic; }
     chain out { type filter hook output priority 0; policy accept;
         update @suids { meta skuid counter } }
+    chain forwarded { type filter hook forward priority 0; policy accept;
+        update @oifaces { meta oifname counter } }
 }
 ```
 
-**Per flow, conntrack** — enable first, it is off by default (`net.netfilter.nf_conntrack_acct=1`),
-then `conntrack -L -o extended`. The tell is asymmetry: one flow to `:443` carrying tens of GB in the
-reply→original direction while the original direction is near-silent.
+`meta skuid` needs a socket in *this* netns, so a container's traffic never matches; forwarded traffic
+has no UID at all, which is why the forward chain counts per interface instead. UID 0 is one bucket and
+is not evidence of anything.
 
-**Per interface, vnstat** — the canary that keeps months of history without capturing:
-`vnstat --alert output exit type d condition above limit 25 GiB`.
+**Per flow, conntrack** — enable first, it is off by default (`net.netfilter.nf_conntrack_acct=1`),
+then `conntrack -L -o extended`. Use it to see *which peer* and *how much*. Do **not** read asymmetry as
+a tunnel signal: a reply-heavy flow is a download, and a relay is often roughly balanced.
+
+**Per interface, vnstat** — the canary that keeps months of history without capturing. Point it at
+*every* interface, not one chosen by hand: `vnstat --alert output exit type d condition above limit
+25 GiB` on `eth0` says nothing about a tunnel over `tun0`. macvlan/ipvlan/SR-IOV traffic does not cross
+the host counters at all.
+
+**Per unit and whole host, `checks/egress-watch.sh`** — samples services, scopes and slices, warns when
+a counter resets, and compares the sum of unit deltas against the host interface counter so bytes no
+unit accounts for are a finding on their own.
 
 **Per connection, `ss -tin`** — the zero-package way to see `bytes_sent`, `bytes_acked`,
 `bytes_received` and `delivery_rate` for a live socket.
@@ -412,15 +432,19 @@ reply→original direction while the original direction is near-silent.
 One file, `/etc/audit/rules.d/50-proxyjack.rules`, then `augenrules --load`. The load-bearing rules:
 
 ```
--a always,exit -F arch=b64 -S socket -F a0=2  -k net_socket
--a always,exit -F arch=b64 -S connect,bind -F saddr_fam=2  -k net_conn
--a always,exit -F arch=b64 -S ioctl -F a1=0x400454ca -k tun_ioctl
--a always,exit -F arch=b64 -S clone -F a0&0x40000000 -k ns_net
--a always,exit -F arch=b64 -S memfd_create -k memfd
--a always,exit -F arch=b64 -F dir=/etc/systemd/system -F perm=wa -k persist
+-a always,exit -F ar -S socket -F a0=2  -k net_socket
+-a always,exit -F ar -S connect,bind -F saddr_fam=2  -k net_conn
+-a always,exit -F ar -S sendto,sendmsg -F saddr_fam=2  -k udp_conn
+-a always,exit -F ar -S ioctl -F a1=0x400454ca -k tun_ioctl
+-a always,exit -F ar -S clone -F a0&0x40000000 -k ns_net
+-a always,exit -F ar -S setns -F a1&0x40000000 -k ns_net
+-a always,exit -F ar -S execveat -k execveat
+-a always,exit -F ar -S memfd_create -k memfd
+-a always,exit -F ar -F dir=/etc/systemd/system -F perm=wa -k persist
+-a always,io_uring -S connect,sendmsg,openat,openat2 -k uring_net
 ```
 
-`checks/50-proxyjack.rules` is the full set. Three traps, each of which silently costs you the whole
+`checks/50-proxyjack.rules` is the full set. Four traps, each of which silently costs you the whole
 ruleset:
 
 - **The field is `arch`, not `ar`.** `-F ar` is not a field at all — libaudit returns "`-F missing
@@ -429,9 +453,12 @@ ruleset:
   `auditctl -l` after every load.
 - **`-F path=` on a directory is not recursive** and needs the inode to exist at load time, which is
   why `-w /etc/ld.so.preload` silently fails on a clean host. Use `-F dir=/etc/cron.d -F perm=wa`.
-- **`saddr_fam` is populated only for bind/connect/sendto**, so family matching on `socket()` must be
-  `-F a0=2` / `-F a0=10`.
-
+- **`saddr_fam` is populated only for bind/connect/sendto**, and for `sendmsg` only when the message
+  carries an address. That is why `sendto,sendmsg` is in the ruleset and a connected `sendmsg` still is
+  not: the data plane needs a probe or the egress counter.
+- **The io_uring filter resolves `-S` against a fixed opcode table in audit userspace.** An opcode that
+  is not in that table aborts the whole load, and `SOCKET`/`SEND`/`RECV` are `audit_skip` in the kernel
+  and can never be audited. Name only `connect,sendmsg,openat,openat2`.
 ### Tier 3 — eBPF, when accounting is not enough
 
 `kprobe:tcp_connect` is the single best probe, and it is upstream's own `tools/tcpconnect.bt`:
@@ -444,15 +471,17 @@ sudo bpftrace -e 'kprobe:tcp_connect { $sk=(struct sock*)arg0;
       ntop($sk->__sk_common.skc_daddr), bswap($sk->__sk_common.skc_dport)); }'
 ```
 
-Use the kprobe (populated `struct sock`), not the syscall tracepoint. The discriminator: aggregate
-connects per `comm` over a 60-second interval and look for a `comm` that **connects but never
-accepts**. That is a strong indicator, not a proof — a DNS client, an HTTP client with a long-lived
-outbound session, and anything behind a reverse proxy all look the same. Confirm against the binary
-path and the destination before acting. `bcc tcplife` is the free way to get bytes/second per
-connection. Tetragon (kernel ≥4.19) adds in-kernel filtering and `Sigkill` at a measured **1.68 %** for
-exec tracing, **2.46 %** with JSON output, **5.88 %** worst-case connection-rate loss. Tracee ships the
-dropper signatures: `fileless_execution` (TRC-105), `dropped_executable` (TRC-1022),
-`stdio_over_socket` (TRC-101).
+Use the kprobe (populated `struct sock`), not the syscall tracepoint. `checks/probes.bt` is the hardened
+set: it adds `execveat` (how a memfd payload actually runs), `clone3` with the namespace flags read out
+of `struct clone_args`, `io_uring_setup`, and `udp_sendmsg` so QUIC/hysteria2 are not invisible.
+
+A per-`comm` connect-vs-accept ratio is a shape heuristic, not a proof: a SOCKS relay is a server, a
+loopback health endpoint supplies an accept, and the name is free. Do not build a control on it. `bcc
+tcplife` traces socket state changes, not packets, so a connection that was already established when the
+tool started has no event until it closes; `ss -tin` is the zero-package per-socket byte view. Tetragon
+(kernel ≥4.19) adds in-kernel filtering and `Sigkill` at a measured **1.68 %** for exec tracing, **2.46 %**
+with JSON output, **5.88 %** worst-case connection-rate loss — write both a TCP and a UDP policy, and
+monitor that the daemon is still alive, because `systemctl stop tetragon` is the bypass.
 
 ### Tier 4 — flow signatures
 
@@ -487,10 +516,11 @@ Four caveats that decide whether these fire at all:
 - for DNS tunnelling (`dnstt`, `iodine`) there is no fixed constant: the signal is label entropy,
   TXT/NULL record volume and per-domain query rate. The corpus is thinner here and says so.
 
-For TLS, prefer JA4 over JA3: JA4 hashes the *sorted* cipher/extension lists, so ordering randomisation
-no longer breaks the fingerprint, and it covers QUIC. Do not build policy on JA3 deny-lists — uTLS
+For TLS, JA4 is a better hash than JA3, but it is a *library* fingerprint, not an intent one. uTLS
 reproduces Chrome closely enough that a client either looks exactly like Chrome or looks random each
-time.
+time; REALITY forwards unauthenticated probes to a real site, so the fingerprint and its server
+counterpart both match the borrowed site. Do not build a policy on a JA3/JA4 deny-list. The only
+residue is an allow-list of fingerprints expected on a given host, which is an inventory problem.
 
 ### Tier 5 — external vantage
 
@@ -528,15 +558,19 @@ Cheap and underused: make the box a worse target than the next one.
   `cowrie.session.file_download`. Built-in output plugins for Telegram, Slack, Discord, AbuseIPDB,
   MISP, Prometheus.
 - **Canarytokens** (free): web bug and DNS tokens fire on *any* access or resolution, no agent needed.
+  They are defeated by blocking the token domain at the resolver or in `/etc/hosts`, so they catch an
+explorer, not a payload that never resolves an unknown name.
 - **Fake credentials and files**: an `~/.aws/credentials` that is never used, a `~/.ssh/id_rsa` that is
   watched. `chattr +i` is a **write** tripwire only — "it cannot be deleted or renamed … and the file
   can not be opened in write mode". For reads, `atime` is unreliable but not useless: under the default
   `relatime`, "the file's last access time is always updated if it is more than 1 day old", so a single
   access to a cold canary moves the timestamp while a stream of accesses does not. Use auditd or
   inotify when you need every access.
-- **`systemd.path`** with `PathExists=`/`DirectoryNotEmpty=` needs no packages, but mind
-  `TriggerLimitIntervalSec`/`TriggerLimitBurst` (defaults **2 s / 200**, systemd 250): after the burst
-  limit the unit fails and silently stops watching.
+- **`systemd.path`** with `PathExists=`/`DirectoryNotEmpty=` needs no packages, but the defaults are a
+trap: `TriggerLimitIntervalSec`/`TriggerLimitBurst` (defaults **2 s / 200**, systemd 250) put the unit
+into a failed state after the burst and it stops watching. Set both to 0 and monitor
+`systemctl --failed`, or the tripwire is a liability. Dotfiles are ignored by path monitoring, and
+`PathExists=` fires on a transition, not on a read — a canary that is read needs inotify or auditd.
 
 ### Tier 7 — notebooks and containers specifically
 
@@ -576,8 +610,11 @@ IPAddressAllow=192.0.2.10
 Placing `IPAddressDeny=any` on `-.slice` is a **host-wide kill switch**: the lists are "implicitly
 combined with any lists configured for any of the parent slice units", so every service inherits the
 deny and only allow-listed ones can talk. Stage it — one slice first, confirm, then move up the tree.
-On a notebook host this breaks pip and DNS unless a resolver is allow-listed, which is the intended
-trade.
+On a notebook host this breaks pip and DNS unless a resolver is allow-listed, and allowing the
+resolver gives the tunnel back: a resolver recurses to any authoritative server, so `dnstt`/`iodine`
+satisfy the policy without ever contacting a denied address. If the notebook needs DNS, run a local
+resolver that only forwards the names the tenant is allowed to resolve; do not allow the recursive
+resolver itself.
 
 **A rate ceiling rather than a hard block**, for a tenant that legitimately needs some bandwidth:
 
@@ -650,12 +687,18 @@ is gone, and delisting requires showing the remediation.
 Every layer here measures bytes and processes. None measures intent: a single encrypted flow to a
 reputable CDN on 443 is simultaneously an ordinary HTTPS client and a working proxy. What holds up is
 **correlation** — an egress trend that does not match the unit's declared purpose, plus a binary that
-lives somewhere writable, plus a session that never accepts, plus a listener inventory that disagrees
-with itself.
+lives somewhere writable, plus a listener inventory that disagrees with itself. Even that combination
+is legitimate for a private seedbox, a self-hosted CI runner or a real remote desktop; those are the
+known limitations in `HARDENING.md`, not detections.
 
 The censor-side figures in §3.5 are the published measurements of the cited paper, not my own
 reproduction. Blocklist, exit-node and pricing figures were measured on 2026-10-31 and will drift. DNS
 tunnelling and Windows-side detection are the thinnest parts of the corpus.
+
+`HARDENING.md` records the adversarial review of every detection family above, including the eight that
+cannot be separated from legitimate use (TLS fingerprint, connect/accept shape, process name, private
+seedbox, self-hosted runner, valid RDP logon, provider billing, and the censor-side classifier). Those
+are not gaps to be closed with more host tooling.
 
 On a host you control, the cheapest reliable outcome is default-deny egress plus per-unit accounting.
 The cheapest reliable *signal* is the one an operator notices without any tooling: traffic that keeps

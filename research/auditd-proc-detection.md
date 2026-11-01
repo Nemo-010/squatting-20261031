@@ -1,5 +1,9 @@
 # Detecting proxyjacking, tunnel squatting and torrent relays with auditd + /proc on one Linux host
 
+> **Hardened 2026-11-01 — adversarial review: D17, D18, D19, D20, D21, D22, D23, D24.** The rule file now covers `sendto,sendmsg` (unconnected UDP), `execveat`, 32-bit twins, filtered `setns`, `mount`, and io_uring `connect,sendmsg,openat,openat2`. `clone3` flags cannot be filtered by audit and a blanket rule floods, so `checks/probes.bt` reads them instead. `TUNSETIFF` is no longer called the highest-value rule: WireGuard never calls it.
+> The corrected checks and the residual bypasses are in
+> [HARDENING.md](../HARDENING.md). Read that before relying on the commands below.
+
 *What the kernel audit subsystem and procfs can prove about a server being used as a proxy, VPN or relay endpoint — no SIEM, no agent, no commercial product. Numbers carry their source; unconfirmed items are marked **unverified** or collected in the last section.*
 
 ---

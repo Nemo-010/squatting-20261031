@@ -1,5 +1,9 @@
 # Tor Exit Relays and IP Reputation: What a Cloud Address Publishes, Which Lists It Lands On, and How to Audit Your Own IP From Outside
 
+> **Hardened 2026-11-01 — adversarial review: D39, D42, D43.** The bulk exit list is IPv4-only, so an IPv6-only exit is unlisted; `checks/external-vantage.sh` now queries both families. RDAP abuse extraction has a fallback chain when the object has no `abuse-c`. Reputation is a lagging indicator that account churn is designed to outrun.
+> The corrected checks and the residual bypasses are in
+> [HARDENING.md](../HARDENING.md). Read that before relying on the commands below.
+
 This file covers one slice: the server that becomes a Tor relay or exit, the public record that act creates (Onionoo, the bulk exit list, `check.torproject.org`), and the blocklists that a cloud IP accumulates independently of Tor (Spamhaus ZEN/SBL/XBL/CSS/PBL/DROP, SpamCop SCBL, CINS, Emerging Threats, AbuseIPDB), plus RIR/RDAP abuse-contact lookup. The emphasis is on what each source's API actually returns, how long each listing survives, and which checks an operator can run on their own box in under a minute. All live measurements below were taken 2026-10-31 from this sandbox; numbers are marked where I measured them.
 
 ## Summary

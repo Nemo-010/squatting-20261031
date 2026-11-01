@@ -1,5 +1,9 @@
 # Detecting proxyjacking inside Jupyter: kernels, connection files and per-user egress accounting on one Linux box
 
+> **Hardened 2026-11-01 — adversarial review: D48, D49.** Runtime artifacts attribute a careless user; they are not a detector (a terminal tab writes no IPython history, and both directories are user-controlled). The allow-list must not include a recursive resolver: a resolver is a general-purpose tunnel egress. `systemd --user` and rootless podman escape the per-notebook cgroup.
+> The corrected checks and the residual bypasses are in
+> [HARDENING.md](../HARDENING.md). Read that before relying on the commands below.
+
 *Scope: JupyterHub and standalone Jupyter Server on a single host, using only software already shipped with the distro (systemd, nftables, iproute2, sqlite3, /proc). No NDR, no commercial agent.*
 
 ## Summary

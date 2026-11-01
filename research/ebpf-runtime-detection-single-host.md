@@ -1,5 +1,9 @@
 # eBPF Runtime Detection of Outbound-Only Tunnels, Proxies and Proxyjacking on One Linux Host
 
+> **Hardened 2026-11-01 — adversarial review: D25, D26, D27, D28, D29, D30.** `checks/probes.bt` adds `execveat`, `clone3` namespace flags, `io_uring_setup` and `udp_sendmsg`. The connect-vs-accept ratio is demoted to a shape heuristic (a SOCKS relay is a server). `tcplife` traces state changes, not packets, and `bindsnoop` sees a design an outbound relay never uses. Tracee's fileless/dropper signatures are not relay coverage.
+> The corrected checks and the residual bypasses are in
+> [HARDENING.md](../HARDENING.md). Read that before relying on the commands below.
+
 Scope: a single ordinary Linux server, no commercial NDR, no appliance. Tools: **bpftrace**, **bcc**, **Tetragon**, **Tracee**. Everything below is free/open source and attaches to the kernel at runtime.
 
 ## Summary

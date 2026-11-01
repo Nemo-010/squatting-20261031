@@ -1,5 +1,9 @@
 # Rootkits that hide the squat: how a host is made to lie to its own inspector
 
+> **Hardened 2026-11-01 — adversarial review: D04, D09, D10, D22, D23.** `/etc/ld.so.preload` is parsed here the way glibc parses it (`#` blanks to end of line, split on space and colon), a per-user `LD_PRELOAD` is added from `/proc/<pid>/environ`, and the netlink-vs-procfs check is a per-inode diff rather than a count. The two views are not independent: both read the same kernel socket table, so the check is a hook indicator, not truth.
+> The corrected checks and the residual bypasses are in
+> [HARDENING.md](../HARDENING.md). Read that before relying on the commands below.
+
 Scope: the userland and kernel hook planes a squatted host uses to erase its own proxy / miner /
 botnet footprint from `ps`, `ss`, `netstat`, `ls` and `cat /proc/net/tcp`, and the free cross-view checks that
 defeat them. Specimens: P2PInfect's `libs.so.1`, Kinsing's `libsystem.so` (a modified **beurk**),

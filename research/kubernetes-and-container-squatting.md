@@ -1,5 +1,9 @@
 # Kubernetes and container squatting: exposed kubelets, Docker APIs, and what the node sees that the cluster does not
 
+> **Hardened 2026-11-01 — adversarial review: D50, D51.** The Unix sockets (`docker.sock`, `containerd.sock`, `crio.sock`, the rootless podman socket) are the API that is always there and are now checked by `checks/triage.sh`. One-shot object sweeps miss an edited DaemonSet; use snapshot diffs. `hostNetwork` pods have no veth, so cAdvisor's per-pod network metric does not see them.
+> The corrected checks and the residual bypasses are in
+> [HARDENING.md](../HARDENING.md). Read that before relying on the commands below.
+
 Scope: how a server running kubelet or dockerd becomes squatting infrastructure without any
 application exploit — the control-plane ports that ship open, the objects that grant host access,
 the registry as a distribution channel, and the split between what a cluster-side query can prove and
