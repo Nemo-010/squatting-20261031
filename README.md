@@ -11,6 +11,9 @@ checks.
 - **[research/](research/)** — the deep dives, one per niche.
 - **[checks/](checks/)** — runnable scripts for the cheapest detection tiers. Most are read-only; two
   are meant to be installed.
+- **[squatting-refutation-20261101](https://github.com/Nemo-010/squatting-refutation-20261101)** — the
+  adversarial review: 59 issues, one per detection family here, each naming the cheapest way past it,
+  plus the eight checks that survive.
 - **[LICENSE](LICENSE)** — 0BSD. Copy it, fork it, resell it, no attribution needed.
 
 ## The 10-minute version
