@@ -40,10 +40,12 @@ tracepoint:syscalls:sys_enter_execveat
 
 tracepoint:syscalls:sys_enter_clone3
 {
-	$a = (struct clone_args *)args->uargs;
-	if ($a->flags & 0x40000000)
+	/* struct clone_args begins with __u64 flags. Read it as a u64 so this does
+	 * not depend on bpftrace having the struct in its type database. */
+	$flags = *(uint64 *)args->uargs;
+	if ($flags & 0x40000000)
 		printf("%-6s %-16s pid=%-6d CLONE_NEWNET\n", "ns", comm, pid);
-	if ($a->flags & 0x10000000)
+	if ($flags & 0x10000000)
 		printf("%-6s %-16s pid=%-6d CLONE_NEWUSER\n", "userns", comm, pid);
 }
 
