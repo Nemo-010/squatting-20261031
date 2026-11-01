@@ -2,7 +2,7 @@
 
 **What gets run on other people's cloud hosts, why it survives, and how to catch it on one box with no budget.**
 
-This is the consolidated technical report. The `research/` directory holds fifteen deep dives with full
+This is the consolidated technical report. The `research/` directory holds sixteen deep dives with full
 command sets, source URLs and "what I could not verify" sections; `checks/` holds runnable scripts that
 implement the cheapest tiers. Everything here is derived from vendor documentation, kernel source,
 RFCs, man pages and published threat intelligence. Provider terms are quoted as facts where they
@@ -120,6 +120,11 @@ Not every squat is a proxy. The same access is reused for:
   and the only policing is AUP §9 "Excessive Bandwidth Use" plus the Actions terms' "disproportionate
   burden" clause.
 - **Remote desktops.** RDP/VNC/xrdp/Guacamole sessions on a "free VPS" obtained for the purpose.
+- **Overlay/mesh nodes.** Tailscale, NetBird, ZeroTier, Nebula, tinc, Yggdrasil, cjdns and iroh
+  running on a borrowed host as a relay or exit for someone else's mesh — see
+  [research/overlay-mesh-networks.md](research/overlay-mesh-networks.md) and `checks/overlay-nets.sh`.
+  The useful asymmetry: a server that grows any new TUN interface, or opens long-lived flows to a
+  vendor's coordination endpoints, is a lead even when every binary is renamed.
 
 ### 1.5 The free-tier inventory, and why each one is chosen
 
@@ -706,7 +711,7 @@ flowing while nothing is being served.
 
 ---
 
-## Appendix — the fifteen deep dives
+## Appendix — the sixteen deep dives
 
 | file | slice |
 |---|---|
@@ -725,3 +730,4 @@ flowing while nothing is being served.
 | [windows-rdp-vnc-and-remote-desktop-abuse.md](research/windows-rdp-vnc-and-remote-desktop-abuse.md) | RDP/xrdp/VNC/Guacamole exposure and logon telemetry |
 | [streaming-IPTV-and-bandwidth-resale.md](research/streaming-IPTV-and-bandwidth-resale.md) | ffmpeg/RTMP/HLS restreaming, fan-out ratios, subscription economics |
 | [external-vantage-and-honeypots.md](research/external-vantage-and-honeypots.md) | Shodan/Censys/CT/passive DNS, endlessh, Cowrie, canarytokens, systemd.path |
+| [overlay-mesh-networks.md](research/overlay-mesh-networks.md) | Tailscale/Headscale, NetBird, ZeroTier, Nebula, tinc, n2n, Yggdrasil, cjdns, iroh; TUN device, coordination endpoints, mesh-written firewall rules |

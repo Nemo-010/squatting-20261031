@@ -3,7 +3,7 @@
 **Proxy, VPN, torrent and notebook workloads that run on other people's cloud hosts — what they are,
 why they stay hidden, and how to find them on one box without buying anything.**
 
-A technical reference for operators. Fifteen deep dives plus a consolidated report, sourced to kernel
+A technical reference for operators. Sixteen deep dives plus a consolidated report, sourced to kernel
 source, RFCs, man pages, vendor documentation and published threat intelligence, and a set of runnable
 checks.
 
@@ -54,7 +54,9 @@ one-click installers leave behind; the Chinese-language ecosystem, its panel sof
 XrayR) and the Cloudflare-workers branch with its documented limits; a free-tier inventory with the
 published allowance for each platform; Jupyter notebooks as the instrument of choice, with six
 documented intrusion chains; torrent ratio farming; bandwidth resale (restreaming, subscription
-markets); and the adjacent roles a borrowed box gets drafted into — open relays, amplification
+markets); overlay and mesh VPN networks (Tailscale, ZeroTier, Nebula, Yggdrasil and the rest) run on a
+borrowed host as someone else's relay or exit; and the adjacent roles a borrowed box gets drafted
+into — open relays, amplification
 reflectors, Tor exits, CI runners, remote desktops.
 
 **The evasion side** — why egress-only multiplexed TLS defeats network detection (no listener, CDN

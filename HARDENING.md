@@ -177,6 +177,7 @@ from a browser" is a design goal. Nothing here can be hardened against it becaus
 | `checks/triage.sh` | rewritten: writability classification, interpreter and anonymous-exec detection, no-toolchain literal scan, glibc-exact preload parsing, per-process linker hooks, package-owner listener column, runtime sockets, expanded persistence with ctime, coverage accounting |
 | `checks/cross-check.sh` | rewritten: per-inode set diff instead of counts, inode-to-pid join with the holder-vs-author warning, preload environment |
 | `checks/network-gaps.sh` | new: HTTP CONNECT, `ssh -D/-R/-w`, DNS tunnels, DoH/DoT, ICMP, vsock, io_uring, user namespaces, and a list of what is not visible |
+| `checks/overlay-nets.sh` | new: mesh/overlay squat indicators — TUN interfaces, mesh process names, state directories and units, mesh-written nftables rules, coordination-endpoint flows (research/overlay-mesh-networks.md) |
 | `checks/baseline.sh` | new: per-unit egress baseline, declared purpose and allowance, drift report |
 | `checks/egress-watch.sh` | rewritten: services+scopes+slices, reset warnings, host-vs-unit comparison, configurable thresholds |
 | `checks/egress-watch.service` | `EnvironmentFile=-/etc/default/egress-watch` |

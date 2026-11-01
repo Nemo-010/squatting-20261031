@@ -4,8 +4,8 @@ Runnable implementations of the cheap tiers in `REPORT.md`, hardened against the
 Read **[HARDENING.md](../HARDENING.md)** first: it says which bypass each file closes and which it
 does not.
 
-Three are strictly read-only (`triage.sh`, `cross-check.sh`, `network-gaps.sh`; `external-vantage.sh`
-writes only to a temp file). `egress-watch.sh` keeps one small state file under `/var/lib/egress-watch`,
+Three are strictly read-only (`triage.sh`, `cross-check.sh`, `network-gaps.sh`, `overlay-nets.sh`;
+`external-vantage.sh` writes only to a temp file). `egress-watch.sh` keeps one small state file under `/var/lib/egress-watch`,
 `baseline.sh` keeps its baseline under `/var/lib/egress-baseline`, and four files are meant to be
 installed (`50-proxyjack.rules`, `accounting.nft`, the `egress-watch` unit pair, `probes.bt`).
 
@@ -14,6 +14,7 @@ installed (`50-proxyjack.rules`, `accounting.nft`, the `egress-watch` unit pair,
 | `triage.sh` | host sweep: image writability, inline interpreters, anonymous exec mappings, linker hooks, listeners with package owner, runtime sockets, netns and scopes, persistence with ctime, coverage accounting | `procps`, `iproute2`, `coreutils`, `find`; root for full coverage |
 | `cross-check.sh` | per-inode diff of the netlink and procfs socket views, inode-to-pid join, deleted libraries, linker hooks | `iproute2` |
 | `network-gaps.sh` | the channels the old corpus did not check: HTTP CONNECT, `ssh -D/-R`, DNS tunnels, DoH/DoT, ICMP, vsock, io_uring, user namespaces | `procps`, `iproute2` |
+| `overlay-nets.sh` | mesh/overlay squat indicators: TUN interfaces, mesh processes, state dirs and units, mesh-written nftables rules, coordination-endpoint flows | `procps`, `iproute2`; `nft` and `conntrack` optional |
 | `baseline.sh` | per-unit egress baseline, declared purpose and allowance, drift report | systemd ≥ 235 (falls back to host counters) |
 | `external-vantage.sh` | asks keyless external services what they see of this host, both address families, with abuse-contact extraction | `curl`, `python3` |
 | `egress-watch.sh` + `.service` + `.timer` | samples `IPEgressBytes` for services, scopes and slices, warns on resets, compares against the host interface counter | systemd ≥ 235, Linux ≥ 4.11 |
@@ -27,6 +28,7 @@ installed (`50-proxyjack.rules`, `accounting.nft`, the `egress-watch` unit pair,
 sudo sh checks/triage.sh            # what is on the box right now
 sudo sh checks/cross-check.sh       # is the box's own tooling telling the truth
 sudo sh checks/network-gaps.sh      # the channels the old checklist missed
+sudo sh checks/overlay-nets.sh      # mesh/overlay VPN squat indicators
 sh checks/external-vantage.sh       # what the outside world thinks of this IP
 ```
 
