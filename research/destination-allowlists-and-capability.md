@@ -452,6 +452,37 @@ The control is real and it is well built. It is also **narrower than its own doc
 would suggest**, because it governs TCP and nothing else — and the corpus' tier list should say so
 before it says anything about flow heuristics.
 
+### 10.3 Where the filter actually sits, measured
+
+The namespace lane answered the question the other nine could only infer. Moving the egress path — a
+fresh `unshare -n` namespace routed back through a veth with SNAT, a different `fwmark` and route
+table, a tun device, an alternate source address — changed **no allow/deny outcome at all**. A blocked
+SNI reset and an allowlisted SNI completed, identically, on every path.
+
+The traffic shaping in the packet capture is what pins the location down:
+
+```
+SYN to a TEST-NET-3 address  ->  Flags [S.]  from the gateway's MAC, ttl 64, ip id 0
+```
+
+A `SYN` to an address that cannot route was **answered**, by the gateway's MAC address, in the local
+TTL with `ip id 0`. So the SYN never left the host: a destination-blind redirect catches all :80 and
+:443 traffic one L2 hop from the container and hands it to an intercepting TLS proxy, which completes
+the TCP handshake itself and only then decides, on the SNI, whether to dial the real host or reset.
+
+Three independent observations corroborate it:
+
+- the container's own **nft ruleset is empty** and every counter in it is zero, so nothing inside
+  consults policy;
+- a tun device fed with test traffic **received packets byte-for-byte**, so the kernel's own routing is
+  not where the decision happens;
+- an alternate source address **black-holed both allowlisted and blocked names**, which is denial
+  rather than bypass — the redirect keys on the destination port, not on the source.
+
+That is why seven of the ten lanes held. The control is not a filter the tenant can route around; it is
+a redirect applied before the packet has a path, and the tenant's namespace is entirely downstream of
+it.
+
 ## Sources
 
 Measured on a rented container sandbox, 2026-11-02: `curl --resolve`, `curl -w` status/numeric fields,
