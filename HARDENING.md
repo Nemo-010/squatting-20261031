@@ -114,10 +114,11 @@ issue stays open.
 | D57 | provider idle reclamation / allowances | known limitation | This is provider-side, outside the guest. The 95th-percentile rule is a duty-cycle exemption by construction: an hour a day at full rate is inside it. A host operator cannot see the provider's billing, and the provider's rule is not tunable from the host. |
 | D58 | the censor-side classifier | known limitation | Not a detection the operator can run, and not available to query. It is the design driver for REALITY/uTLS/XHTTP, which is exactly why D31-D38 lose. Kept as explanation, not as a control. |
 | D59 | coverage gaps | fixed | `network-gaps.sh` adds HTTP CONNECT, `ssh -D/-R/-w`, DNS-tunnel clients, DoH/DoT, ICMP counters and raw sockets, vsock, io_uring users and user namespaces. `baseline.sh` provides the missing method for "traffic that does not match the unit's declared purpose". Provider flow logs are named as the view the guest cannot edit. Round ten adopted `no-socket-relays.md`'s list: tun-fd sweep (readlink `/dev/net/tun`, fdinfo major 10 / minor 200 fallback), `ss -0/-w/--xdp` complements, `ip -d link show` tunnel-type sweep (`ip tunnel` misses vxlan/geneve), module check, sing-box `/etc/sing-box/*.json` glob, and marked root stubs for nft/ruleset, `tc filter`, `bpftool`, `ip xfrm`. The TLS-in-TLS non-capability sentence now cites Xue et al., USENIX Security 2024, and names the detector as network-side (D58), not host-side. |
+| D60 | the tenant is the operator | known limitation | A sandbox that hands its tenant `UID 0` puts the guest's own telemetry under the party being detected: the workload can rename, backdate, preload and lie, and it runs under the same UID as anything watching it. Only counters outside the guest carry information it cannot rewrite — the pod's veth, the host socket tables, the provider API, the DNS path. Stronger than D57, which says the provider is outside the guest; this says the guest's telemetry belongs to the wrong party. `checks/workspace-integrity.sh` survives it only because a platform-owned poller runs it from outside the tenant's authority; from inside it is bookkeeping the squatter does on themselves. |
 
 ## Known limitations (issues left open)
 
-These are the eight that survive hardening because the signal is identical to legitimate use, or
+These are the nine that survive hardening because the signal is identical to legitimate use, or
 because it is outside the guest. They are labelled `known-limitation` and stay open.
 
 ### D02 — `comm` is not identity
@@ -169,6 +170,25 @@ the provider's rule or the provider's flow logs.
 The censor-side classifier is a network-side system the operator neither runs nor can query. Its
 value in this corpus is explanatory: it is why flow-shape detection loses, and why "indistinguishable
 from a browser" is a design goal. Nothing here can be hardened against it because it is not ours.
+
+### D60 — the tenant is the operator
+
+A platform that hands its tenant `UID 0` puts the guest's own telemetry under the party being detected.
+Everything this corpus reads inside a host — `comm`, `argv[0]`, `/proc/net/tcp`, files under a writable
+path — is written by that party and can be rewritten by it, in the same namespace and under the same
+UID as anything watching. Hardening an in-guest check therefore never closes the class; it only raises
+the price of the rewrite.
+
+This is stronger than D57. D57 says the provider is outside the guest and cannot be hooked. D60 says
+the guest's telemetry belongs to the wrong party in the first place, which is why a per-notebook
+`IPAccounting=` recipe has nowhere to attach: there is no unit, no cgroup network controller and no
+privilege to install one.
+
+What survives is what the tenant cannot reach: byte counters on the pod's veth, socket tables on the
+host side of the sentry, the provider's own lifecycle and billing records, and the DNS answer stream.
+`checks/workspace-integrity.sh` works only where a platform-owned process runs it — the poller the
+platform already schedules, executing from outside the tenant's authority. From inside, the same
+script is bookkeeping a squatter does on themselves.
 
 ## What changed in the repository
 

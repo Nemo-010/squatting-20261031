@@ -17,6 +17,7 @@ installed (`50-proxyjack.rules`, `accounting.nft`, the `egress-watch` unit pair,
 | `overlay-nets.sh` | mesh/overlay squat indicators: TUN interfaces, mesh processes, state dirs and units, mesh-written nftables rules, coordination-endpoint flows | `procps`, `iproute2`; `nft` and `conntrack` optional |
 | `baseline.sh` | per-unit egress baseline, declared purpose and allowance, drift report | systemd ≥ 235 (falls back to host counters) |
 | `external-vantage.sh` | asks keyless external services what they see of this host, both address families, with abuse-contact extraction | `curl`, `python3` |
+| `workspace-integrity.sh` | notebook-tree sweep: files that post-date the sandbox, executables that belong to no package. The cheapest detection in `research/sandbox-as-a-service-squatting.md`, and the only one there that fires on intent rather than on traffic | `find`, `coreutils`; one of `dpkg`/`rpm`/`pacman`/`apk` for ownership (says so when there is none) |
 | `egress-watch.sh` + `.service` + `.timer` | samples `IPEgressBytes` for services, scopes and slices, warns on resets, compares against the host interface counter | systemd ≥ 235, Linux ≥ 4.11 |
 | `accounting.nft` | per-UID egress counters plus forwarded bytes per interface; no daemon | nftables, kernel with `meta skuid` |
 | `50-proxyjack.rules` | auditd rules for socket/connect/sendto/TUNSETIFF/namespaces/memfd/execveat/mount/persistence/io_uring | auditd ≥ 3.1 for the uring filter |
@@ -30,6 +31,7 @@ sudo sh checks/cross-check.sh       # is the box's own tooling telling the truth
 sudo sh checks/network-gaps.sh      # the channels the old checklist missed
 sudo sh checks/overlay-nets.sh      # mesh/overlay VPN squat indicators
 sh checks/external-vantage.sh       # what the outside world thinks of this IP
+sh checks/workspace-integrity.sh    # notebook tree: what appeared after boot
 ```
 
 Then, if you want history rather than a snapshot:
@@ -71,6 +73,10 @@ bpftrace checks/probes.bt
   `relatime`. Neither is in these scripts for that reason.
 - **`systemd.path` stops watching after its trigger limit.** Set `TriggerLimitIntervalSec=0` and
   `TriggerLimitBurst=0`, and monitor `systemctl --failed`, or the tripwire is a liability.
+- **`workspace-integrity.sh` says "unknown", not "unpackaged", when it cannot query a package
+  database.** A host with no usable `dpkg`/`rpm`/`pacman`/`apk` would otherwise report every binary in
+  the tree as unowned, which is a false positive on every file — the same failure mode as running
+  `cross-check.sh` on a kernel that cannot open netlink.
 
 ## What these scripts will not tell you
 

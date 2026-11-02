@@ -2,7 +2,7 @@
 
 **What gets run on other people's cloud hosts, why it survives, and how to catch it on one box with no budget.**
 
-This is the consolidated technical report. The `research/` directory holds twenty-three deep dives with full
+This is the consolidated technical report. The `research/` directory holds twenty-four deep dives with full
 command sets, source URLs and "what I could not verify" sections; `checks/` holds runnable scripts that
 implement the cheapest tiers. Everything here is derived from vendor documentation, kernel source,
 RFCs, man pages and published threat intelligence. Provider terms are quoted as facts where they
@@ -726,9 +726,10 @@ The censor-side figures in §3.5 are the published measurements of the cited pap
 reproduction. Blocklist, exit-node and pricing figures were measured on 2026-10-31 and will drift. DNS
 tunnelling and Windows-side detection are the thinnest parts of the corpus.
 
-`HARDENING.md` records the adversarial review of every detection family above, including the eight that
+`HARDENING.md` records the adversarial review of every detection family above, including the nine that
 cannot be separated from legitimate use (TLS fingerprint, connect/accept shape, process name, private
-seedbox, self-hosted runner, valid RDP logon, provider billing, and the censor-side classifier). Those
+seedbox, self-hosted runner, valid RDP logon, provider billing, the censor-side classifier, and a
+tenant who holds root in the guest being the party under detection). Those
 are not gaps to be closed with more host tooling.
 
 On a host you control, the cheapest reliable outcome is default-deny egress plus per-unit accounting.
@@ -737,7 +738,7 @@ flowing while nothing is being served.
 
 ---
 
-## Appendix — the twenty-three deep dives
+## Appendix — the twenty-four deep dives
 
 | file | slice |
 |---|---|
@@ -764,3 +765,4 @@ flowing while nothing is being served.
 | [macos-host-squatting.md](research/macos-host-squatting.md) | mac colos, GitHub/GitLab hosted macOS runners, launchd/Login-Item persistence, Screen Sharing, kernel-visible surface |
 | [content-hosting-squatting.md](research/content-hosting-squatting.md) | borrowed web server as phishing/kit/C2 host: access logs, document root, web-shell recipes, cert issuance against your hostname |
 | [scanner-fleets.md](research/scanner-fleets.md) | rented scanner fleets (masscan/zmap/zgrab2/nuclei): AF_PACKET shape invisible to connected-socket checks, per-unit SYN ratios, provider notices |
+| [sandbox-as-a-service-squatting.md](research/sandbox-as-a-service-squatting.md) | a free-tier GPU notebook sandbox seen from inside: the tenant holds root, the capability set closes every socket-less relay lane, the GPU is the arbitrage unit, and the platform's only guardrail is a mining string-match against one file with a name-based kill |

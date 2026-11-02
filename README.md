@@ -3,13 +3,13 @@
 **Proxy, VPN, torrent and notebook workloads that run on other people's cloud hosts — what they are,
 why they stay hidden, and how to find them on one box without buying anything.**
 
-A technical reference for operators. Twenty-three deep dives plus a consolidated report, sourced to kernel
+A technical reference for operators. Twenty-four deep dives plus a consolidated report, sourced to kernel
 source, RFCs, man pages, vendor documentation and published threat intelligence, and a set of runnable
 checks.
 
 - **[REPORT.md](REPORT.md)** — the consolidated document. Start here.
 - **[HARDENING.md](HARDENING.md)** — the adversarial review, issue by issue: what was fixed, what was
-  corrected, and the eight detections that cannot be separated from legitimate use.
+  corrected, and the nine detections that cannot be separated from legitimate use.
 - **[research/](research/)** — the deep dives, one per niche.
 - **[checks/](checks/)** — runnable scripts for the cheapest detection tiers. Most are read-only; two
   are meant to be installed.
@@ -46,6 +46,12 @@ not create, and the single most useful *control* is default-deny egress in syste
 on a slice, allow-list per service). Do not allow a resolver in that list: a resolver is a general
 purpose tunnel egress.
 
+On a notebook or sandbox host none of that exists — no systemd, no `ss`, no auditd — and the cheapest
+thing left is the tree itself: `sh checks/workspace-integrity.sh /workspace` lists files that post-date
+the sandbox and executables that belong to no package. That is [`research/sandbox-as-a-service-squatting.md`](research/sandbox-as-a-service-squatting.md),
+and it is the only detection in this corpus written from inside a host where the tenant already holds
+root.
+
 ## What the corpus covers
 
 **The abuse side** — proxyjacking and its unit economics (MITRE T1496.002); the self-service relay
@@ -59,8 +65,11 @@ borrowed host as someone else's relay or exit; and the adjacent roles a borrowed
 into — open relays, amplification reflectors, Tor exits, CI runners, remote desktops; hypervisor
 fleets (Proxmox/KVM) nested inside one rented box; the bare-metal BMC/IPMI management plane the guest
 cannot see; HPC batch schedulers (Slurm, PBS/LSF/SGE, managed cloud batch) used as compute arbitrage;
-macOS hosts (colos, hosted runners, launchd persistence); rented scanner fleets; and a borrowed web
-server turned into somebody's phishing, kit and C2 host.
+macOS hosts (colos, hosted runners, launchd persistence); rented scanner fleets; a borrowed web
+server turned into somebody's phishing, kit and C2 host; and a vendor's GPU notebook sandbox, seen from
+inside, where the tenant is handed root and the only guardrail is a mining string-match against one
+file — the one first-hand case here, with the platform's own poller and allowlist read from the guest
+side.
 
 **The evasion side** — why egress-only multiplexed TLS defeats network detection (no listener, CDN
 destination, one flow, 100–1000 byte padding, tiny per-host volume, legitimate binaries); the relay
