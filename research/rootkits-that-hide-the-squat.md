@@ -418,10 +418,13 @@ this corpus' first case would find nothing. And zapper's `-a` did **not** rename
 it stayed `job.sh` — so its name-hiding is narrower than its README implies, while its argument
 redaction works.
 
-A design proposal for closing that gap in confmask — detach after the entry swap, implement
-`PR_SET_MM_ARG_START/END`, exact-size the argv region so the NUL ratio stops being a fingerprint, and
-stop naming the memfd after the tool — is filed upstream as
-[Nemo-010/confmask#29](https://github.com/Nemo-010/confmask/issues/29).
+A design proposal for closing that gap in confmask is filed upstream as
+[Nemo-010/confmask#29](https://github.com/Nemo-010/confmask/issues/29). The mechanism it turns on is
+worth recording here because it is widely assumed to be privileged and is not: `prctl(PR_SET_MM,
+PR_SET_MM_MAP, …)` is **unprivileged** — the `CAP_SYS_RESOURCE` check in `kernel/sys.c` sits after the
+map dispatch — and one call relocates the arg/env windows, rewrites `saved_auxv` so `AT_EXECFN` matches,
+and moves `start_stack`. That closes the residency tell, the exact-size tell and the `[stack]` tell at
+once, from userland, without a tracer.
 
 The general rule this sharpens: **a detector keyed to a mechanism detects the tools that use that
 mechanism.** `TracerPid` catches supervisors; `comm`-versus-`exe` catches renames; absence-of-arguments
