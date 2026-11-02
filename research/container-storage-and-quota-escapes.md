@@ -329,6 +329,33 @@ bytes never appear in the container's own filesystem.
 - **No cross-tenant read**, at least not visibly: `/var/lib/docker/containers` was absent, so the bind
   was a fresh directory on a shared volume rather than the node's live Docker state.
 
+## 10. What else the tenant can see of the platform
+
+Two surfaces beyond storage, both cheap to enumerate and both worth a line in any sandbox review.
+
+**The supervisor is PID 1 and it listens on localhost.** On the measured sandbox, `/usr/local/bin/<agent>
+sleep infinity` held four listening TCP sockets inside the tenant's own namespace — an API-shaped one
+returning `404` on every obvious path, an SSH-adjacent one, and two HTTP servers whose titles were
+**"Web Terminal"** and **"Screen Recordings"**. The tenant can reach all of them with `curl`.
+
+That is a design choice with two readings. It is convenient: the platform's own tooling is addressable
+from inside. It is also a control plane inside the sandbox, and a squatter who wanted to make a host
+lie has a natural target that is neither the kernel nor `/proc`. Nothing was done to them here beyond a
+`GET /`, and none of them should be reachable from a tenant namespace without authentication the tenant
+cannot read.
+
+**The environment names the tenancy.** `VENDORD_*` variables carried the organization id, region,
+sandbox id, snapshot name and sandbox user. Those are identifiers rather than credentials, and they are
+the join key for everything else: a squatter who wants to be boring should not carry them into a child
+process, because they tie a workload to a billing entity across sandbox recreations.
+
+| surface | observed | why it matters |
+|---|---|---|
+| PID 1 | platform supervisor, not the workload | the tenant's process tree has a platform-owned root |
+| listening sockets | 4, all reachable from the tenant | a control plane inside the boundary |
+| env | organization, region, sandbox, snapshot ids | cross-sandbox join key for billing and abuse review |
+| cron / systemd | neither running | no persistence vector inside the sandbox at all |
+
 ## Sources
 
 Measured on a rented container sandbox, 2026-11-02: `df -hT`; `/proc/self/mountinfo`;

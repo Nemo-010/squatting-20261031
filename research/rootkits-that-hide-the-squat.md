@@ -325,56 +325,66 @@ artefact in the class.
 
 ---
 
-## 8. A measure-and-hide tool, and what still gives it away
+## 8. Argument laundering: what a /proc scrubber leaves behind
 
-Not every tool that lies to `/proc` is a rootkit. `confmask` is a legitimate one — an open-source
-supervisor that replaces a process tree's `cmdline`, `environ` and `comm` with a presentation label so
-that a token passed on a command line does not appear in `ps`. Run against a container sandbox with all
-capabilities, it was as good as advertised and it still left five things behind.
+A squatter who wants to hide *what* a process is doing has an easier job than one hiding *that it
+exists*. `confmask` is the cleanest published example: it runs a command under a ptrace supervisor and
+rewrites `cmdline`, `environ` and `comm` for the whole tree, keeping a presentation label in their
+place while the program keeps its real `argv`.
 
-The setup: a payload holding a canary token in both `argv` and the environment, run under
-`confmask --label ci-runner --secret TOKEN=…`. The red goal is that no `/proc` file contains the token;
-the blue goal is anything that says "this is supervised".
+Measured on a container sandbox with a credential in `argv`:
 
-**Red, on its stated goal.** Clean:
+```
+RED   ps -eo pid,ppid,comm,args
+      48042  48039  ci-runner   ci-runner
+      48045  48042  ci-runner   ci-runner
+      48046  48045  ci-runner   ci-runner
 
-```console
-$ grep -rl 'ghp_REDTEAM_CANARY' /proc/*/cmdline /proc/*/environ 2>/dev/null | wc -l
-0
+RED   token sightings across every /proc/*/cmdline and /proc/*/environ: 0
 ```
 
-`ps -eo pid,ppid,comm,args` showed `ci-runner` for the supervisor, the payload and its child, with the
-correct parent chain and no arguments. That is the contract and it holds.
+The red claim holds. Blue still has four handles.
 
-**Blue, and this is the part worth keeping.** A masked process is a *traced* process, because the
-mechanism is a ptrace supervisor. Everything below follows from that:
-
-| observable | value on a masked pid | why it matters |
-|---|---|---|
-| `TracerPid` in `/proc/<pid>/status` | `4263` (non-zero) | every masked process names its supervisor; one pass over `/proc/*/status` finds the whole tree |
-| `readlink /proc/<pid>/exe` | `/usr/bin/dash`, `.../sleep` | the label says `ci-runner`; the image says `dash`. `comm`-versus-`exe` disagreement is D02 pointing the other way |
-| `fd` names | `/memfd:confmask-secret`, `/secretmem` | the tool's own names, in the fd table, readable by the same uid |
-| `syscall`, `wchan` | readable (`do_wait`, `hrtimer_nanosleep`) | the supervisor's state machine is visible even when its arguments are not |
-| `Seccomp`, `NoNewPrivs`, `Threads` | `2`, `0`, `1` | unchanged, so not a tell by itself |
-
-The cheapest detector in the whole corpus is therefore one line, and it covers every ptrace-based
-injection tool rather than this one:
+**1. The tracer.** A ptrace supervisor is a tracer, so `/proc/<pid>/status` carries a non-zero
+`TracerPid` for every process in the tree. In the same run, `48045` and `48046` were both traced by
+`48044`, and `48044` itself does not appear in `ps` under any label — it is the only process on the box
+whose `/proc` entry was never rewritten.
 
 ```sh
-awk '/^TracerPid:/{if ($2 != 0) print FILENAME, $2}' /proc/[0-9]*/status
+awk '/^TracerPid:/ && $2 != 0 {print FILENAME, $2}' /proc/[0-9]*/status
 ```
 
-with the usual caveat that it cannot tell a debugger from a redactor from an injection — which is D02
-running in reverse, and honest about it.
+**2. `exe` is not rewritten.** `readlink /proc/<pid>/exe` returned `/usr/bin/dash` and
+`/usr/lib/cargo/bin/coreutils/sleep` while `comm` said `ci-runner` for both. A `comm` that disagrees
+with the basename of its own `exe` is the D02 signal inverted: the corpus treats a renamed binary as
+unidentifiable, but a *consistent* rename also removes the disagreement, and this tool does not produce
+one.
 
-**What this reframes.** The tool buys *argument* privacy, not *process* privacy. Against a same-uid
-observer with `/proc` access, the label is a decoy and the `exe` path is the truth. A squat that uses it
-to hide a relay binary gets the arguments hidden and the binary named — the same trade as
-`--rexec`, one rung lower than the README's own ladder suggests.
+**3. The label is padded, and the padding is measurable.** `wc -c /proc/<pid>/cmdline` returned 51 bytes
+for a command with two visible tokens, and the naive `tr '\0' '\n' | wc -l` returns 42 "arguments". The
+rewrite keeps the original `argv` region allocated and fills it with NULs, so a `cmdline` whose byte
+length is a large multiple of its text content is a scrubbed one. Nothing legitimate produces that
+shape.
 
-The general lesson for this file: **hiding what a process is doing is easier than hiding that it is
-being watched.** Every mechanism in §1 modifies what a reader sees; nearly all of them must first attach
-to the process to do it, and the attachment is the artefact.
+```sh
+# a cmdline mostly made of NUL is a rewritten one
+awk '{print FILENAME}' /proc/[0-9]*/cmdline 2>/dev/null |
+while read -r f; do
+	n=$(tr -cd '\0' < "$f" 2>/dev/null | wc -c)
+	t=$(tr -d '\0' < "$f" 2>/dev/null | wc -c)
+	[ "$t" -gt 0 ] && [ "$n" -gt $((t * 2)) ] && echo "$f nul=$n text=$t"
+done
+```
+
+**4. The supervisor is an ordinary process with an ordinary name.** It ran from `/tmp/confmask`, which
+`readlink` on its `exe` reports like any other binary. A squatter who renames it must still keep it
+running, and it carries no label of its own.
+
+The general point for this file: **metadata laundering trades one artifact for another.** The corpus'
+hook-plane taxonomy (§1) covers processes that lie about what they *are*; this covers a process that
+lies about what it *does*, and the lie is bounded by the mechanism that writes it. Anything that must
+attach to a process to rewrite it leaves the attachment visible, and the attachment is not forgeable
+from inside the victim's namespace without root on the host.
 
 ## Sources
 
