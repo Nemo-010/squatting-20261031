@@ -71,8 +71,9 @@ server turned into somebody's phishing, kit and C2 host; a vendor's GPU notebook
 inside, where the tenant is handed root and the only guardrail is a mining string-match against one
 file; a `/proc`-masking tool measured against the detector that finds it anyway; a rented container sandbox that advertises 10 GB and leaves 2.1 TB writable through bind-mounted
 host paths; and the same sandbox with every capability in the kernel and nowhere to send the bytes,
-because its egress is a destination allowlist rather than a port filter. The last three are first-hand
-cases, measured from inside a tenant's own tenancy.
+because its egress is a destination allowlist rather than a port filter — and where ten separate
+lanes measured what such a control does and does not stop, down to where in the packet path it
+decides. The last three are first-hand cases, measured from inside a tenant's own tenancy.
 
 **The evasion side** — why egress-only multiplexed TLS defeats network detection (no listener, CDN
 destination, one flow, 100–1000 byte padding, tiny per-host volume, legitimate binaries); the relay
