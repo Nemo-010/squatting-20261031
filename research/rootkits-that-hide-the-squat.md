@@ -280,6 +280,14 @@ printing, not the hook. Once an LKM is in the TCB, verify from a rescue boot or 
 
 ## 7. Detection recipe (cheapest first)
 
+**0. Anything with a `TracerPid`.** Before the load-inspection tier: a process being traced is a
+process something is attached to, and in a container where nobody debugs, that is an injection or a
+redactor. See §8.
+
+```sh
+awk '/^TracerPid:/{if ($2 != 0) print FILENAME, $2}' /proc/[0-9]*/status
+```
+
 Run as root; each step names its false-positive mode.
 
 1. **`lsattr -a /etc/ld.so.preload; ls -l /etc/ld.so.preload; tr ':#' '\n\n' < /etc/ld.so.preload`**
@@ -316,6 +324,57 @@ injected object must be **mapped** — recorded in `mm->mmap` even after the loa
 artefact in the class.
 
 ---
+
+## 8. A measure-and-hide tool, and what still gives it away
+
+Not every tool that lies to `/proc` is a rootkit. `confmask` is a legitimate one — an open-source
+supervisor that replaces a process tree's `cmdline`, `environ` and `comm` with a presentation label so
+that a token passed on a command line does not appear in `ps`. Run against a container sandbox with all
+capabilities, it was as good as advertised and it still left five things behind.
+
+The setup: a payload holding a canary token in both `argv` and the environment, run under
+`confmask --label ci-runner --secret TOKEN=…`. The red goal is that no `/proc` file contains the token;
+the blue goal is anything that says "this is supervised".
+
+**Red, on its stated goal.** Clean:
+
+```console
+$ grep -rl 'ghp_REDTEAM_CANARY' /proc/*/cmdline /proc/*/environ 2>/dev/null | wc -l
+0
+```
+
+`ps -eo pid,ppid,comm,args` showed `ci-runner` for the supervisor, the payload and its child, with the
+correct parent chain and no arguments. That is the contract and it holds.
+
+**Blue, and this is the part worth keeping.** A masked process is a *traced* process, because the
+mechanism is a ptrace supervisor. Everything below follows from that:
+
+| observable | value on a masked pid | why it matters |
+|---|---|---|
+| `TracerPid` in `/proc/<pid>/status` | `4263` (non-zero) | every masked process names its supervisor; one pass over `/proc/*/status` finds the whole tree |
+| `readlink /proc/<pid>/exe` | `/usr/bin/dash`, `.../sleep` | the label says `ci-runner`; the image says `dash`. `comm`-versus-`exe` disagreement is D02 pointing the other way |
+| `fd` names | `/memfd:confmask-secret`, `/secretmem` | the tool's own names, in the fd table, readable by the same uid |
+| `syscall`, `wchan` | readable (`do_wait`, `hrtimer_nanosleep`) | the supervisor's state machine is visible even when its arguments are not |
+| `Seccomp`, `NoNewPrivs`, `Threads` | `2`, `0`, `1` | unchanged, so not a tell by itself |
+
+The cheapest detector in the whole corpus is therefore one line, and it covers every ptrace-based
+injection tool rather than this one:
+
+```sh
+awk '/^TracerPid:/{if ($2 != 0) print FILENAME, $2}' /proc/[0-9]*/status
+```
+
+with the usual caveat that it cannot tell a debugger from a redactor from an injection — which is D02
+running in reverse, and honest about it.
+
+**What this reframes.** The tool buys *argument* privacy, not *process* privacy. Against a same-uid
+observer with `/proc` access, the label is a decoy and the `exe` path is the truth. A squat that uses it
+to hide a relay binary gets the arguments hidden and the binary named — the same trade as
+`--rexec`, one rung lower than the README's own ladder suggests.
+
+The general lesson for this file: **hiding what a process is doing is easier than hiding that it is
+being watched.** Every mechanism in §1 modifies what a reader sees; nearly all of them must first attach
+to the process to do it, and the attachment is the artefact.
 
 ## Sources
 

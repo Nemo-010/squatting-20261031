@@ -69,7 +69,7 @@ cannot see; HPC batch schedulers (Slurm, PBS/LSF/SGE, managed cloud batch) used 
 macOS hosts (colos, hosted runners, launchd persistence); rented scanner fleets; a borrowed web
 server turned into somebody's phishing, kit and C2 host; a vendor's GPU notebook sandbox, seen from
 inside, where the tenant is handed root and the only guardrail is a mining string-match against one
-file; a rented container sandbox that advertises 10 GB and leaves 2.1 TB writable through bind-mounted
+file; a `/proc`-masking tool measured against the detector that finds it anyway; a rented container sandbox that advertises 10 GB and leaves 2.1 TB writable through bind-mounted
 host paths; and the same sandbox with every capability in the kernel and nowhere to send the bytes,
 because its egress is a destination allowlist rather than a port filter. The last three are first-hand
 cases, measured from inside a tenant's own tenancy.
