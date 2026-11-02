@@ -257,7 +257,39 @@ is tested.
 This is the same economics as the rest of this corpus, moved down a layer: the platform pays per node
 volume, the tenant is billed per container, and the difference is the margin.
 
-## 7. Detection
+## 7. The other quotas, tested one by one
+
+The storage quota turned out to be the one that binds least. Testing the rest the same way — allocate
+until refused, count the cores actually used — gives a table that is worth more than any single finding
+in this document:
+
+| resource | advertised to the tenant | enforced? | how it was established |
+|---|---|---|---|
+| memory | `memory.max` = 4 GiB | **yes** | a page-touching allocator reached 3.5 GiB and was SIGKILLed before 4 |
+| cpu | `cpu.max` = `400000 100000` (4 CPUs) | **no** | 16 CPU-bound children finished 2 s of work in 2.00 s — 16 cores effective |
+| io | `io.max` | **not set at all** | empty file; no rate ceiling exists to enforce |
+| pids | `pids.max` = 16384 | unverified | a runaway fork storm pushed the host's load average past 3000 before the session dropped |
+| disk on `/` | 10 GB overlay | **yes** | a 12 GiB `fallocate` fails with `ENOSPC` |
+| disk on the bind | nothing was advertised | **n/a** | 2 TiB free and writable |
+
+Two of those are the interesting ones.
+
+**CPU is not charged.** `cpu.max` reads as four CPUs and the scheduler does not apply it: sixteen
+CPU-bound children completed two seconds of work each in two seconds of wall time. The tenant is
+getting the host's cores, which on this machine meant at least 16 of 48. For a platform selling a
+"2 vCPU" tier, that is the whole margin.
+
+**`/proc/loadavg` and `/proc/meminfo` are not namespaced.** They report the *host*: 48 cores, 193 GiB,
+and a load average that reached three thousand during a runaway fork storm inside one container. The
+first is an information leak — the tenant learns the node's size and, through load, whether neighbours
+are busy. The second is a noisy-neighbour problem: one sandbox's fork storm is visible in every other
+sandbox's `/proc/loadavg` on the same node, and in the platform's own monitoring.
+
+That last point is also the cheapest detector for resource abuse that does not need per-container
+accounting at all: a node whose load average and task count move without any container's own counters
+moving is a container whose limits are not binding.
+
+## 8. Detection
 
 Three checks, cheapest first, and the first one is free because the data already exists.
 
@@ -288,7 +320,7 @@ after twenty minutes of heavy work, and the node volume moved by gigabytes. That
 node volume climbing — is the signature, and no per-container byte counter will show it because the
 bytes never appear in the container's own filesystem.
 
-## 8. What this does not give you
+## 9. What this does not give you
 
 - **No host escape.** Device nodes existed and were denied; there was no path to the node's
   filesystem outside the mounted directories.
