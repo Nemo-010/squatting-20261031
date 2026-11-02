@@ -289,6 +289,33 @@ That last point is also the cheapest detector for resource abuse that does not n
 accounting at all: a node whose load average and task count move without any container's own counters
 moving is a container whose limits are not binding.
 
+### 7.1 Page cache is charged to the tenant, and it OOMs the writer
+
+Filling the bind mount is not free. A buffered write is charged to the container's `memory.max` as
+page cache, so the same 20 GiB that would be trivial on a host is a SIGKILL inside a 4 GiB cgroup:
+
+```console
+$ dd if=/dev/zero of=/mnt/storage2/.buf bs=64M count=320 conv=fsync
+Killed
+$ cat /sys/fs/cgroup/memory.current
+4159680512
+
+$ dd if=/dev/zero of=/mnt/storage2/.dir bs=64M count=320 oflag=direct
+21474836480 bytes copied, 12.5254 s, 1.7 GB/s
+```
+
+The first is killed at the cgroup ceiling; the second, bypassing page cache, completes. Two consequences
+worth recording:
+
+- **A tenant who fills the volume with ordinary tooling is killed before they fill it.** `dd`, `cp`,
+  `tar` and most language runtimes write buffered. Only `O_DIRECT` or an explicit `posix_fadvise`
+  clears the charge, which very little userland does.
+- **The kill is not attributed to the storage at all.** It reads as an out-of-memory event in a
+  container whose `free` said 189 GiB available, which is the worst possible diagnostic.
+
+For the platform, the same fact is an accidental rate limit: the memory cgroup is doing the job that
+`io.max` should be doing, and doing it by killing rather than by throttling.
+
 ## 8. Detection
 
 Three checks, cheapest first, and the first one is free because the data already exists.
