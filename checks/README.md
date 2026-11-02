@@ -13,7 +13,7 @@ installed (`50-proxyjack.rules`, `accounting.nft`, the `egress-watch` unit pair,
 |---|---|---|
 | `triage.sh` | host sweep: image writability, inline interpreters, anonymous exec mappings, linker hooks, listeners with package owner, runtime sockets, netns and scopes, persistence with ctime, coverage accounting | `procps`, `iproute2`, `coreutils`, `find`; root for full coverage |
 | `cross-check.sh` | per-inode diff of the netlink and procfs socket views, inode-to-pid join, deleted libraries, linker hooks | `iproute2` |
-| `network-gaps.sh` | the channels the old corpus did not check: HTTP CONNECT, `ssh -D/-R`, DNS tunnels, DoH/DoT, ICMP, vsock, io_uring, user namespaces | `procps`, `iproute2` |
+| `network-gaps.sh` | the channels the old corpus did not check: HTTP CONNECT, `ssh -D/-R`, DNS tunnels, DoH/DoT, ICMP, vsock, io_uring, user namespaces; plus the no-socket relay lanes — tun-fd sweep, `ss -0/-w/--xdp` complements, L3 tunnel terminators (`ip -d link show`, `/proc/modules`, xfrm), kernel-side DNAT/tc/bpftool surfaces (root) | `procps`, `iproute2`; `nft`, `tc`/iproute2, `bpftool`, `bpftrace` optional |
 | `overlay-nets.sh` | mesh/overlay squat indicators: TUN interfaces, mesh processes, state dirs and units, mesh-written nftables rules, coordination-endpoint flows | `procps`, `iproute2`; `nft` and `conntrack` optional |
 | `baseline.sh` | per-unit egress baseline, declared purpose and allowance, drift report | systemd ≥ 235 (falls back to host counters) |
 | `external-vantage.sh` | asks keyless external services what they see of this host, both address families, with abuse-contact extraction | `curl`, `python3` |

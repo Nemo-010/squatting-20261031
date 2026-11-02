@@ -244,7 +244,12 @@ Everything used here is in `procps`, `iproute2` and `coreutils`. `lsof`, `auditd
 - **qBittorrent default peer port 6881.** Not found in `preferences.cpp` or `sessionimpl.cpp` at the paths I checked; third-party Docker readmes say 6881. Treat as unverified.
 - **rathole's 2333.** The upstream example uses it, but `bind_addr` is documented as "Necessary", i.e. there is no compiled default.
 - **Second Akamai SHA256** (`72e7dd199bed6eefa0ae763c399e0d8a56e2b1dfacc089046706226a5f2a`) is truncated to 60 hex chars in the published page — do not use it as a match string.
-- **sing-box config path** `/etc/sing-box/config.json`: widely used in tutorials and third-party installers, but I found no first-party install script in `SagerNet/sing-box`'s `release/` directory to confirm it.
+- **sing-box config path.** CORRECTED in round ten (`research/no-socket-relays.md` §2): the shipped
+  unit runs `ExecStart=/usr/bin/sing-box -D /var/lib/sing-box -C /etc/sing-box run`, and `-C` is
+  `--config-directory` (`cmd/sing-box/cmd.go`) — so the real surface is the directory glob
+  `/etc/sing-box/*.json`, not the single-file `/etc/sing-box/config.json` that tutorials and
+  third-party installers repeat. The unverified single-file claim stands retired; `network-gaps.sh`
+  now checks the directory.
 - **tmate.** The upstream README appears to reference a hosted-service shutdown (commit dated Oct 2026); I did not confirm whether `tmate.io` still operates, so "outbound SSH to tmate.io:22" is stated as the documented model, not as current status.
 - **Whether `cloudflared` binds anything besides the metrics port by default.** Docs describe only the metrics endpoint; no documented local control socket.
 - **No live execution** of `docker`, `nsenter`, `auditctl` or `bpftrace` was performed here (shared sandbox, no privileged state changes); command syntax was validated against upstream docs and, where possible, parsed locally (`ss` filter syntax tested on iproute2-7.3.0).
