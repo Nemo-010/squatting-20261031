@@ -194,6 +194,97 @@ allowlist deployment is whether it is a *name* list or an *IP* list. An IP list 
 fronting service on a shared CDN address; a name list is defeated only by a decoy SNI or by a host that
 happens to share an allowed name. Both are detectable, both are worth logging.
 
+## 6. Round two: what actually survives the allowlist
+
+A first pass concluded the sandbox was airtight and stopped there. It is not airtight; it is *narrow*.
+Pushing on the four channels that remained gives a much better picture of where this control actually
+fails.
+
+### 6.1 The policy reads the name and ignores the address
+
+The cleanest test is to dial an address that cannot possibly serve the site and present an allowlisted
+name anyway:
+
+```console
+$ curl --resolve github.com:443:104.16.132.229 https://github.com/ | head -c 60
+<!DOCTYPE html>
+<html lang="en" data-color-mode="light" ...
+```
+
+That is Cloudflare's address answering with **GitHub's own HTML**. A non-allowlisted name at GitHub's
+address returns nothing. So the destination is chosen by the name in the ClientHello and the address in
+the SYN is not consulted at all — consistent with a transparent proxy that terminates, reads SNI and
+dials the name itself.
+
+Two consequences, and the second is the important one:
+
+- **An IP-based allowlist would be defeated** by anything sharing an address; this one is not, because
+  it never uses the address.
+- **A name-based allowlist is defeated by owning an allowlisted name**, and nothing else. The question
+  stops being "can I reach my server" and becomes "can I get my payload under a name the platform
+  trusts".
+
+### 6.2 The allowlist contains two of the largest user-content platforms on the internet
+
+`api.github.com`, `raw.githubusercontent.com` and `huggingface.co` all answer `200`:
+
+```console
+$ curl -sS -o /dev/null -w '%{http_code}\n' https://api.github.com/zen
+200
+$ curl -sS -o /dev/null -w '%{http_code}\n' https://huggingface.co/api/models?limit=1
+200
+```
+
+Both are repositories where **an account holder controls the content**. A squatter with a GitHub or
+Hugging Face account therefore has a bidirectional channel that the allowlist explicitly permits: task
+in, results out, over a name the platform decided was safe because a package manager needs it. The
+write direction needs a token, which was not available here, but the read direction is proof that the
+channel terminates somewhere attacker-controlled.
+
+This is the structural flaw in every "allow what the package manager needs" list: the package manager
+needs the two biggest code-hosting platforms in the world, and those platforms host arbitrary
+user-controlled bytes.
+
+### 6.3 DNS is a channel the allowlist never touches
+
+Direct reachability to a public resolver is blocked:
+
+```console
+$ timeout 4 bash -c 'echo > /dev/tcp/1.1.1.1/53'; echo $?
+# blocked
+```
+
+But the *platform's* resolver answers whatever it is asked, including labels under a domain the tenant
+controls, so the query leaves the sandbox and goes upstream:
+
+```console
+$ getent ahostsv4 nx-c2709fc399d10d6bda6d8e30.ajam.dev
+# NXDOMAIN, returned by the resolver - which means the query was forwarded
+```
+
+A recursive resolver is a general-purpose egress, which this corpus says elsewhere about resolvers in
+allow-lists ([REPORT.md](../REPORT.md) §5). The allowlist governs connections; it does not govern the
+resolver's upstream, so a domain the squatter controls plus an authoritative nameserver is a full
+data channel that no TCP policy in this sandbox sees.
+
+### 6.4 What did not work
+
+- **The platform's own services do not proxy.** All four supervisor sockets answer `404` to `CONNECT`.
+- **A blocked name is blocked at every address.** Dialling GitHub's address with
+  `www.wikipedia.org` returns nothing.
+- **The metadata service is reachable but refuses.** `169.254.169.254` answers `403` on every obvious
+  path, with or without an `Authorization` header — present, not open, and no attempt was made to find
+  the credential shape it wants.
+
+### 6.5 What this means for the ranking
+
+The first pass ranked this sandbox "capability without reachability". The accurate statement is
+**capability with a narrow, name-based reachability**, and the ranking should be by what the allowlist
+*admits* rather than by how tight it looks. A list that includes GitHub and Hugging Face is an
+exfiltrating tenant's best-case environment; a list that includes only mirrors of operating-system
+packages is not. The difference is not the length of the list, it is whether any entry lets a user
+publish bytes.
+
 ## 7. What this does not prove
 
 - **That the reset comes from a proxy rather than the destination.** A consistent reset after
