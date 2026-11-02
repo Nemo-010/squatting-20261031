@@ -282,7 +282,8 @@ printing, not the hook. Once an LKM is in the TCB, verify from a rescue boot or 
 
 **0. Anything with a `TracerPid`.** Before the load-inspection tier: a process being traced is a
 process something is attached to, and in a container where nobody debugs, that is an injection or a
-redactor. See §8.
+redactor. See §8 — and see §8.1, because this finds the *supervisor* model and misses tools that
+detach after the rewrite.
 
 ```sh
 awk '/^TracerPid:/{if ($2 != 0) print FILENAME, $2}' /proc/[0-9]*/status
@@ -385,6 +386,42 @@ hook-plane taxonomy (§1) covers processes that lie about what they *are*; this 
 lies about what it *does*, and the lie is bounded by the mechanism that writes it. Anything that must
 attach to a process to rewrite it leaves the attachment visible, and the attachment is not forgeable
 from inside the victim's namespace without root on the host.
+
+### 8.1 Measured against a second implementation, and the tell that disappeared
+
+The `TracerPid` detector in §8 is correct and it is also **implementation-specific**. Running the same
+workload under two different masking tools on the same box shows why:
+
+| | `comm` | `exe` | `TracerPid` | argv redacted |
+|---|---|---|---|---|
+| nothing (baseline) | `job.sh` | `/usr/bin/dash` | `0` | no |
+| **zapper v1.1** | `job.sh` | `/usr/bin/dash` | **`0`** | **yes** |
+| **zapper v1.1 stealth** | `job.sh` | `/usr/bin/dash` | **`0`** | **yes** |
+| confmask 0.1.0 | `ci-runner` | `/usr/bin/dash` | **`8469`** | yes |
+
+zapper redacted the arguments and left **no tracer behind**. Its README explains it: it uses `ptrace()`
+to move the command options, rewrites the pointers in the ELF auxiliary table, and then
+`PTRACE_CONTINUE`s and detaches, re-attaching only at `fork()`/`execve()`. confmask stays attached as a
+supervisor for the life of the tree, which is what produces a stable non-zero `TracerPid`.
+
+So the one-liner in §7 — `awk '/^TracerPid:/ && $2 != 0'` — finds **every confmask session and no zapper
+session at all**. It detects a *supervision model*, not a *class of tool*.
+
+What still catches zapper is the other signal in §8: `comm` says `job.sh` and `exe` says
+`/usr/bin/dash`, which is ordinary, but the *arguments* the process is running are absent from a
+`cmdline` that otherwise looks normal. That is a different question — "why does this process have no
+arguments?" — and it does not need a tracer to ask.
+
+Two secondary differences worth recording. The **stealth build** carries zero `zapper` strings against
+thirteen in the normal build (30,600 vs 50,832 bytes), so the string-scan that identified the binary in
+this corpus' first case would find nothing. And zapper's `-a` did **not** rename `comm` in this test —
+it stayed `job.sh` — so its name-hiding is narrower than its README implies, while its argument
+redaction works.
+
+The general rule this sharpens: **a detector keyed to a mechanism detects the tools that use that
+mechanism.** `TracerPid` catches supervisors; `comm`-versus-`exe` catches renames; absence-of-arguments
+catches redactors. No single line covers the class, which is why §7's recipe is a list rather than a
+one-liner.
 
 ## Sources
 

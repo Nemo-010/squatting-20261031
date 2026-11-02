@@ -530,6 +530,32 @@ re-evaluated — a second hello in the same stream is not re-judged. That asymme
 squatter has room to think, and it does not help them: the first name still has to be one the operator
 allowed.
 
+### 10.5 What ten negatives do not mean
+
+Ten lanes found no bypass of the name filter. That is a statement about ten hypotheses, not about the
+control, and the difference is worth being explicit about because the strong version is false.
+
+**The parser held against everything thrown at it. The set is the soft spot.** Every lane attacked the
+*matching*, and every one failed. Nothing attacked the *contents of the allowlist*, which is where the
+cheap wins are, and none of them need a reverse proxy or an SSH reverse tunnel:
+
+| avenue | why it works | status |
+|---|---|---|
+| **free accounts on allowlisted platforms** | `pypi.org`, `files.pythonhosted.org`, `registry.npmjs.org`, `crates.io`, `github.com` all permit account creation and upload. Attacker-controlled content on an allowed name is *the intended traffic* — `pip install` is what the list exists for | **not tested**; this is the most likely bypass in the document |
+| dangling CNAME / subdomain takeover | a lapsed record under an allowlisted domain resolves back to an attacker | not tested |
+| IDN homograph | `gіthub.com` with a Cyrillic `і`; depends entirely on normalisation | not tested |
+| second ClientHello on `:443` | the destination is fixed by the first hello and never re-judged (§10.4) | not tested whether anything downstream can be steered |
+| IPv6 | no v6 path on *this node*; that is node configuration, not a platform guarantee | untested on a v6-enabled node |
+| UDP / ICMP | open (§7.9), tunnel unproven | partially tested |
+
+So the defensible claim is **"no bypass of the name matching was found in ten lanes"**, not "this cannot
+be bypassed". A control that verifies the name is only as strong as the honesty of the names it trusts,
+and a list built from package-manager needs necessarily trusts platforms where anyone can publish.
+
+That is also the useful framing for a defender: the question is not "can the filter be fooled" — this
+one cannot, apparently — it is **"which entries on this list let a stranger put bytes?"** Every free
+package registry on an allowlist is a writable channel by design.
+
 ## Sources
 
 Measured on a rented container sandbox, 2026-11-02: `curl --resolve`, `curl -w` status/numeric fields,
