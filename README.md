@@ -3,7 +3,7 @@
 **Proxy, VPN, torrent and notebook workloads that run on other people's cloud hosts — what they are,
 why they stay hidden, and how to find them on one box without buying anything.**
 
-A technical reference for operators. Sixteen deep dives plus a consolidated report, sourced to kernel
+A technical reference for operators. Twenty-three deep dives plus a consolidated report, sourced to kernel
 source, RFCs, man pages, vendor documentation and published threat intelligence, and a set of runnable
 checks.
 
@@ -56,11 +56,16 @@ published allowance for each platform; Jupyter notebooks as the instrument of ch
 documented intrusion chains; torrent ratio farming; bandwidth resale (restreaming, subscription
 markets); overlay and mesh VPN networks (Tailscale, ZeroTier, Nebula, Yggdrasil and the rest) run on a
 borrowed host as someone else's relay or exit; and the adjacent roles a borrowed box gets drafted
-into — open relays, amplification
-reflectors, Tor exits, CI runners, remote desktops.
+into — open relays, amplification reflectors, Tor exits, CI runners, remote desktops; hypervisor
+fleets (Proxmox/KVM) nested inside one rented box; the bare-metal BMC/IPMI management plane the guest
+cannot see; HPC batch schedulers (Slurm, PBS/LSF/SGE, managed cloud batch) used as compute arbitrage;
+macOS hosts (colos, hosted runners, launchd persistence); rented scanner fleets; and a borrowed web
+server turned into somebody's phishing, kit and C2 host.
 
 **The evasion side** — why egress-only multiplexed TLS defeats network detection (no listener, CDN
-destination, one flow, 100–1000 byte padding, tiny per-host volume, legitimate binaries); why the
+destination, one flow, 100–1000 byte padding, tiny per-host volume, legitimate binaries); the relay
+lanes that never appear in a socket inventory at all (`/dev/net/tun`-backed
+userland stacks, kernel-side relaying, L3 tunnel terminators); why the
 obvious detection layers are blind by construction (`-m owner` cannot see forwarded packets,
 `meta cgroup` reads a cgroup v1 attribute, containers have their own netns); what the other detector in
 the path is (the censor-side classifier that the protocol design is actually aimed at); and what

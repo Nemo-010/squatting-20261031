@@ -2,7 +2,7 @@
 
 **What gets run on other people's cloud hosts, why it survives, and how to catch it on one box with no budget.**
 
-This is the consolidated technical report. The `research/` directory holds sixteen deep dives with full
+This is the consolidated technical report. The `research/` directory holds twenty-three deep dives with full
 command sets, source URLs and "what I could not verify" sections; `checks/` holds runnable scripts that
 implement the cheapest tiers. Everything here is derived from vendor documentation, kernel source,
 RFCs, man pages and published threat intelligence. Provider terms are quoted as facts where they
@@ -46,10 +46,18 @@ Traffmonetizer, Weave. **Carriers:** Mimo/Mimo'lette, P2PInfect, TeamTNT's Docke
 Kinsing, LABRAT, TrafficStealer, EMERALDWHALE. TeamPCP (2025–26) moved the same business into
 Kubernetes with a **privileged DaemonSet mounting the host filesystem**.
 
+The same hire-out logic extends to the tooling: a squatted host can be one node in an orchestrated
+masscan/zmap/nuclei run whose scheduling came from a rented fleet wrapper. From inside the host a
+scanning squat has an AF_PACKET shape the connected-socket detectors never see — see
+[research/scanner-fleets.md](research/scanner-fleets.md).
+
 ### 1.2 The self-service relay — one binary, one outbound flow
 
 This is the population that matters for a server operator. A proxy server bound to loopback plus a
-tool that publishes it through a third party, so **no inbound port is ever opened**.
+tool that publishes it through a third party, so **no inbound port is ever opened**. An entire
+family goes further and never appears in the socket inventory at all — userland TCP stacks over
+`/dev/net/tun` fds, kernel-side relaying through nftables DNAT, and L3 tunnel terminators — see
+[research/no-socket-relays.md](research/no-socket-relays.md).
 
 | layer | tools | observable signature |
 |---|---|---|
@@ -125,6 +133,24 @@ Not every squat is a proxy. The same access is reused for:
   [research/overlay-mesh-networks.md](research/overlay-mesh-networks.md) and `checks/overlay-nets.sh`.
   The useful asymmetry: a server that grows any new TUN interface, or opens long-lived flows to a
   vendor's coordination endpoints, is a lead even when every binary is renamed.
+- **A hypervisor inside the box.** Proxmox/KVM nested in one rented server makes the host into
+  somebody's private cloud: tenant VMs, images, storage and networks invisible to per-process and
+  per-UID accounting by construction — see
+  [research/hypervisor-squatting.md](research/hypervisor-squatting.md).
+- **The out-of-band plane.** On bare-metal rentals the BMC/IPMI/Redfish surface is a second
+  computer in the chassis: separate CPU, RAM and network stack, so no guest-side check observes
+  its firmware, while its inbound KCS/`ipmitool` leg answers from the very firmware being
+  questioned — see
+  [research/bmc-ipmi-out-of-band-persistence.md](research/bmc-ipmi-out-of-band-persistence.md).
+- **Batch queues.** Slurm/PBS/LSF/SGE, managed cloud batch and shared lab queues are another
+  tenant's compute arbitrage lane, with the scheduler — not the kernel — as the tenancy boundary —
+  see [research/hpc-slurm-gpu-squatting.md](research/hpc-slurm-gpu-squatting.md).
+- **macOS hosts.** Mac colos and hosted macOS runners as free compute, with launchd/Login-Item
+  persistence and Screen Sharing as the platform's own lever — see
+  [research/macos-host-squatting.md](research/macos-host-squatting.md).
+- **Content hosting.** A compromised or repurposed web server on a host you pay for, serving phishing
+  landings, kit downloads and C2 pull-homes from your document root underneath your access logs — see
+  [research/content-hosting-squatting.md](research/content-hosting-squatting.md).
 
 ### 1.5 The free-tier inventory, and why each one is chosen
 
@@ -711,7 +737,7 @@ flowing while nothing is being served.
 
 ---
 
-## Appendix — the sixteen deep dives
+## Appendix — the twenty-three deep dives
 
 | file | slice |
 |---|---|
@@ -731,3 +757,10 @@ flowing while nothing is being served.
 | [streaming-IPTV-and-bandwidth-resale.md](research/streaming-IPTV-and-bandwidth-resale.md) | ffmpeg/RTMP/HLS restreaming, fan-out ratios, subscription economics |
 | [external-vantage-and-honeypots.md](research/external-vantage-and-honeypots.md) | Shodan/Censys/CT/passive DNS, endlessh, Cowrie, canarytokens, systemd.path |
 | [overlay-mesh-networks.md](research/overlay-mesh-networks.md) | Tailscale/Headscale, NetBird, ZeroTier, Nebula, tinc, n2n, Yggdrasil, cjdns, iroh; TUN device, coordination endpoints, mesh-written firewall rules |
+| [no-socket-relays.md](research/no-socket-relays.md) | relays invisible to the socket inventory: lane A userland TCP stacks over `/dev/net/tun` fds, lane B kernel relay (nft DNAT, tc `mirred`, eBPF sockmap), lane C L3 terminators (GRE/SIT/IPIP/VXLAN/Geneve/IPsec); `ip -d link`, `ss -0/-w/--xdp`, `/proc/*/fd` complements |
+| [hypervisor-squatting.md](research/hypervisor-squatting.md) | Proxmox/KVM nested on one rented box: pmxcfs inventory under `/etc/pve`, per-VM tap sysfs counters, `vmbr0` bridge taps, per-VM firewall files, what lands as a clean VM provider |
+| [bmc-ipmi-out-of-band-persistence.md](research/bmc-ipmi-out-of-band-persistence.md) | BMC/IPMI/Redfish out-of-band plane: second computer in the chassis, iDRAC/iLO/Supermicro shapes, BMC-side log sources and their limits, nothing guest-side reaches the BMC |
+| [hpc-slurm-gpu-squatting.md](research/hpc-slurm-gpu-squatting.md) | Slurm/PBS/LSF/SGE, AWS/GCP batch, lab servers: scheduler as tenancy boundary, GPU arbitrage, per-job accounting and evasion shapes |
+| [macos-host-squatting.md](research/macos-host-squatting.md) | mac colos, GitHub/GitLab hosted macOS runners, launchd/Login-Item persistence, Screen Sharing, kernel-visible surface |
+| [content-hosting-squatting.md](research/content-hosting-squatting.md) | borrowed web server as phishing/kit/C2 host: access logs, document root, web-shell recipes, cert issuance against your hostname |
+| [scanner-fleets.md](research/scanner-fleets.md) | rented scanner fleets (masscan/zmap/zgrab2/nuclei): AF_PACKET shape invisible to connected-socket checks, per-unit SYN ratios, provider notices |
