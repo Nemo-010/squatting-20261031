@@ -22,6 +22,12 @@ tunnel families this corpus documents.*
   `1.1.1.1`, `8.8.8.8`, `api.trycloudflare.com`, `api.cloudflareclient.com`.
 - **Cloudflare the website is allowed; Cloudflare the tunnel API is not.** The allowlist has per-host
   granularity, so "the CDN is reachable" says nothing about whether a tunnel is.
+- **The control reads the name and ignores the address.** An allowlisted SNI dialled at an unrelated
+  address returns the real service; a blocked name returns nothing at any address; plain HTTP is
+  filtered by the `Host` header. Name-based at both layers.
+- **It is not airtight.** Two channels survive: the resolver forwards arbitrary queries (demonstrated
+  round trip through a wildcard service), and the allowlist admits GitHub and Hugging Face, where an
+  account holder controls the bytes.
 - The environment had `CapEff: 000001ffffffffff` — all 41 capabilities — plus `/dev/net/tun`, a
   working `ip tuntap add`, a loadable DNAT rule and a writable `net.ipv4.ip_forward`. Lanes A and B of
   [no-socket-relays.md](no-socket-relays.md) both work, and both are useless.
