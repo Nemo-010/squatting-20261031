@@ -28,6 +28,9 @@ tunnel families this corpus documents.*
 - **It is not airtight.** Two channels survive: the resolver forwards arbitrary queries (demonstrated
   round trip through a wildcard service), and the allowlist admits GitHub and Hugging Face, where an
   account holder controls the bytes.
+- **It is a TCP allowlist.** Ten lanes: seven held, one works (DNS), one is partial (UDP/ICMP). The
+  control is a terminating proxy at the gateway which reassembles before deciding, fails closed on
+  everything it cannot parse, and never consults the tenant's namespace.
 - The environment had `CapEff: 000001ffffffffff` — all 41 capabilities — plus `/dev/net/tun`, a
   working `ip tuntap add`, a loadable DNAT rule and a writable `net.ipv4.ip_forward`. Lanes A and B of
   [no-socket-relays.md](no-socket-relays.md) both work, and both are useless.
@@ -483,6 +486,46 @@ That is why seven of the ten lanes held. The control is not a filter the tenant 
 a redirect applied before the packet has a path, and the tenant's namespace is entirely downstream of
 it.
 
+### 10.4 What the parser does when it cannot parse
+
+The last lane attacked the parser itself: absent SNI, lying lengths, duplicate extensions, a leading
+non-ClientHello record, raw TCP with no TLS. If any one of those were forwarded, the name check would
+be decorative.
+
+It is not. **No fail-open case was found**, and the shapes are worth recording because they are also
+fingerprints:
+
+| input | result |
+|---|---|
+| SNI extension removed, empty `server_name_list`, one empty name, extension retyped to `0x1234`, empty ClientHello body | RESET in every shape |
+| `list_len` lying by 0, +40, −8; `name_len` +20 or `0xFFFF`; list length larger than the bytes sent | RESET |
+| two SNI extensions (`github`+`github`, `example`+`github`, `github`+`example`) | RESET — duplication alone is fatal |
+| a ChangeCipherSpec, application-data, alert, ServerHello-typed or empty record **before** a valid hello | RESET, **even when the hello behind it carries an allowed name** |
+| bare TCP to :443 with no TLS | RESET on data; on silence, held and then closed with a graceful **FIN at exactly 15.00 s** |
+| a ClientHello carried in the SYN | reached nothing at all — inconclusive, not closed |
+
+Two of those are more than a negative result.
+
+**The 15.00 s timer.** A silent or zero-length-record connection to :443 is held and then FINed at
+15.002 s, 15.001 s, 15.000 s and 15.002 s at four addresses — routable and unroutable alike, so it is a
+local timer and not an upstream timeout. Port 80 has no such timer and stays open past 25 s. That
+fixed, address-independent FIN is a near-unique signature of this specific appliance, and the cheapest
+thing a squatter can use to fingerprint it.
+
+**Exact match, with two wrinkles.** The comparison is exact-match against a lowercased name:
+`GITHUB.COM` and `GitHub.Com` are carried, while `github.com.` (trailing dot), `sub.github.com`,
+`evilgithub.com`, `github.com.evil.test`, `github.com..`, `github.com:443` and a NUL-suffixed variant all
+reset. The trailing dot is the interesting one: it is a legal, fully-qualified form of the same name,
+so an allowlist that does not normalise it will reject a client that sends it — a usability bug rather
+than a security hole, and a one-line fix on the operator's side.
+
+**Where the destination is fixed.** On :80 the name is re-checked per request: one connection carried
+`Host: github.com` → `301`, `example.com` → `403`, `deb.debian.org` → `200`, including two requests
+pipelined in a single write. On :443 the destination is fixed by the first ClientHello and never
+re-evaluated — a second hello in the same stream is not re-judged. That asymmetry is the one place a
+squatter has room to think, and it does not help them: the first name still has to be one the operator
+allowed.
+
 ## Sources
 
 Measured on a rented container sandbox, 2026-11-02: `curl --resolve`, `curl -w` status/numeric fields,
@@ -493,17 +536,6 @@ Documentation: RFC 8446 §4.1.2 for the ClientHello and SNI; RFC 6066 §3 for SN
 `tls(7)`/`openssl-s_client(1)` for where a handshake can be terminated; the `nft(8)` netfilter hooks
 for where a DNAT rule sits relative to a process's socket; `ip-tuntap(8)` and `tun(4)`;
 `sysctl(8)` for `net.ipv4.ip_forward`.
-
-## What I could not verify
-
-- **The proxy's identity.** No capture was taken; the inference is from timing (reset after
-  ClientHello) and selectivity (by name, not address).
-- **Whether a decoy SNI would be forwarded.** Not tested — it would be the first step of circumventing
-  the policy rather than measuring it, and that is a different decision.
-- **Whether the allowlist holds for UDP and QUIC.** Only TCP 443 and TCP 80 were characterised.
-  `cfrs doctor` reported UDP 7844 as silent, which is consistent with a drop rather than a reset, but
-  one probe is not a policy.
-- **Whether the list is per-platform or per-region.** One sandbox, one measurement.
 
 ## What I could not verify
 
@@ -518,10 +550,11 @@ for where a DNAT rule sits relative to a process's socket; `ip-tuntap(8)` and `t
 - **The precise appliance.** The capture shows where the decision happens — at the gateway, before the
   SYN leaves the host — not what implements it. A note in the block page names `envoy`; that is a
   server header, not a configuration.
-- **Whether the two outstanding lanes changed the picture.** Namespace rewrites were measured (§10.3)
-  and altered nothing. Raw-socket and malformed-handshake parsing was run separately; its results are
-  recorded in the repository's issue trail rather than here, because a hang is not a bypass and the
-  lane did not produce a fail-open case it could repeat.
+- **Whether a ClientHello can be carried in the SYN.** The raw-socket lane tried it and nothing was
+  reached — not even a ServerHello for an allowlisted name — so that variant is untested rather than
+  closed.
+- **Whether the out-of-order reset is sequence reassembly or a blunt "stream unparseable" rule.** Both
+  are closed; which one it is determines how a future evasion would have to be shaped.
 - **IPv6.** The lane found no v6 path at all — `disable_ipv6=1`, and re-enabling it with `CAP_NET_ADMIN`
   produced no route and no neighbour. That is a measurement of this sandbox, not of the platform; a
   node with v6 enabled may carry a different policy, and the name filter would have no v6 counterpart.
