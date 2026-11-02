@@ -504,3 +504,24 @@ for where a DNAT rule sits relative to a process's socket; `ip-tuntap(8)` and `t
   `cfrs doctor` reported UDP 7844 as silent, which is consistent with a drop rather than a reset, but
   one probe is not a policy.
 - **Whether the list is per-platform or per-region.** One sandbox, one measurement.
+
+## What I could not verify
+
+- **UDP tunnel throughput.** Public `iperf3` servers listen on 5201, which is silent in both protocols
+  here, so the sustained-rate test could not be run. Whether UDP/3478 carries application data or only
+  a STUN handshake needs a controlled endpoint on that port.
+- **Whether the interceptor special-cases STUN.** A middlebox that understands STUN could be passing
+  the binding exchange and dropping anything else on 3478. Distinguishing "UDP is open" from "an ALG
+  understands one protocol on one port" was not possible without a server of my own.
+- **ICMP tunnel viability.** Echo works to arbitrary addresses with payload intact, which is
+  `ptunnel`-shaped, but no tunnel was built or measured.
+- **The precise appliance.** The capture shows where the decision happens — at the gateway, before the
+  SYN leaves the host — not what implements it. A note in the block page names `envoy`; that is a
+  server header, not a configuration.
+- **Whether the two outstanding lanes changed the picture.** Namespace rewrites were measured (§10.3)
+  and altered nothing. Raw-socket and malformed-handshake parsing was run separately; its results are
+  recorded in the repository's issue trail rather than here, because a hang is not a bypass and the
+  lane did not produce a fail-open case it could repeat.
+- **IPv6.** The lane found no v6 path at all — `disable_ipv6=1`, and re-enabling it with `CAP_NET_ADMIN`
+  produced no route and no neighbour. That is a measurement of this sandbox, not of the platform; a
+  node with v6 enabled may carry a different policy, and the name filter would have no v6 counterpart.
