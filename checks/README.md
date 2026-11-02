@@ -17,6 +17,7 @@ installed (`50-proxyjack.rules`, `accounting.nft`, the `egress-watch` unit pair,
 | `overlay-nets.sh` | mesh/overlay squat indicators: TUN interfaces, mesh processes, state dirs and units, mesh-written nftables rules, coordination-endpoint flows | `procps`, `iproute2`; `nft` and `conntrack` optional |
 | `baseline.sh` | per-unit egress baseline, declared purpose and allowance, drift report | systemd ≥ 235 (falls back to host counters) |
 | `external-vantage.sh` | asks keyless external services what they see of this host, both address families, with abuse-contact extraction | `curl`, `python3` |
+| `storage-reach.sh` | every writable mount larger than twice the root filesystem, one line per backing volume, plus the file-bind tell (`df /etc/hosts` reports the node volume) and which device nodes exist but are denied at `open(2)`. This is the 10 GB-sandbox-with-2.1 TB check | `coreutils`, `findutils`; root for the device probes |
 | `workspace-integrity.sh` | notebook-tree sweep: files that post-date the sandbox, executables that belong to no package. The cheapest detection in `research/sandbox-as-a-service-squatting.md`, and the only one there that fires on intent rather than on traffic | `find`, `coreutils`; one of `dpkg`/`rpm`/`pacman`/`apk` for ownership (says so when there is none) |
 | `egress-watch.sh` + `.service` + `.timer` | samples `IPEgressBytes` for services, scopes and slices, warns on resets, compares against the host interface counter | systemd ≥ 235, Linux ≥ 4.11 |
 | `accounting.nft` | per-UID egress counters plus forwarded bytes per interface; no daemon | nftables, kernel with `meta skuid` |
@@ -32,6 +33,7 @@ sudo sh checks/network-gaps.sh      # the channels the old checklist missed
 sudo sh checks/overlay-nets.sh      # mesh/overlay VPN squat indicators
 sh checks/external-vantage.sh       # what the outside world thinks of this IP
 sh checks/workspace-integrity.sh    # notebook tree: what appeared after boot
+sh checks/storage-reach.sh          # storage the platform did not intend to hand out
 ```
 
 Then, if you want history rather than a snapshot:

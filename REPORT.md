@@ -2,7 +2,7 @@
 
 **What gets run on other people's cloud hosts, why it survives, and how to catch it on one box with no budget.**
 
-This is the consolidated technical report. The `research/` directory holds twenty-four deep dives with full
+This is the consolidated technical report. The `research/` directory holds twenty-six deep dives with full
 command sets, source URLs and "what I could not verify" sections; `checks/` holds runnable scripts that
 implement the cheapest tiers. Everything here is derived from vendor documentation, kernel source,
 RFCs, man pages and published threat intelligence. Provider terms are quoted as facts where they
@@ -738,7 +738,7 @@ flowing while nothing is being served.
 
 ---
 
-## Appendix — the twenty-four deep dives
+## Appendix — the twenty-six deep dives
 
 | file | slice |
 |---|---|
@@ -766,3 +766,5 @@ flowing while nothing is being served.
 | [content-hosting-squatting.md](research/content-hosting-squatting.md) | borrowed web server as phishing/kit/C2 host: access logs, document root, web-shell recipes, cert issuance against your hostname |
 | [scanner-fleets.md](research/scanner-fleets.md) | rented scanner fleets (masscan/zmap/zgrab2/nuclei): AF_PACKET shape invisible to connected-socket checks, per-unit SYN ratios, provider notices |
 | [sandbox-as-a-service-squatting.md](research/sandbox-as-a-service-squatting.md) | a free-tier GPU notebook sandbox seen from inside: the tenant holds root, the capability set closes every socket-less relay lane, the GPU is the arbitrage unit, and the platform's only guardrail is a mining string-match against one file with a name-based kill |
+| [container-storage-and-quota-escapes.md](research/container-storage-and-quota-escapes.md) | the 10 GB sandbox with 2.1 TB writable two directories over: host bind mounts, the overlay quota that binds and the one that does not, guest-reported host resources, device nodes present but denied, and why per-container byte counters cannot see any of it |
+| [destination-allowlists-and-capability.md](research/destination-allowlists-and-capability.md) | all 41 capabilities, TUN, nft DNAT and `ip_forward`, and nowhere to send the bytes: the destination allowlist as the control that beats every evasion lane, why a TCP connect test lies about it, and the four egress policies and how to tell them apart |

@@ -3,7 +3,7 @@
 **Proxy, VPN, torrent and notebook workloads that run on other people's cloud hosts — what they are,
 why they stay hidden, and how to find them on one box without buying anything.**
 
-A technical reference for operators. Twenty-four deep dives plus a consolidated report, sourced to kernel
+A technical reference for operators. Twenty-six deep dives plus a consolidated report, sourced to kernel
 source, RFCs, man pages, vendor documentation and published threat intelligence, and a set of runnable
 checks.
 
@@ -48,9 +48,10 @@ purpose tunnel egress.
 
 On a notebook or sandbox host none of that exists — no systemd, no `ss`, no auditd — and the cheapest
 thing left is the tree itself: `sh checks/workspace-integrity.sh /workspace` lists files that post-date
-the sandbox and executables that belong to no package. That is [`research/sandbox-as-a-service-squatting.md`](research/sandbox-as-a-service-squatting.md),
-and it is the only detection in this corpus written from inside a host where the tenant already holds
-root.
+the sandbox and executables that belong to no package. Two more, for containers: `sh checks/storage-reach.sh`
+finds the writable mount that dwarfs the quota you were sold, which is where a tenant puts terabytes the
+platform never bills; and any egress test that does not complete a TLS handshake is reporting a port
+filter, not a destination policy.
 
 ## What the corpus covers
 
@@ -66,10 +67,12 @@ into — open relays, amplification reflectors, Tor exits, CI runners, remote de
 fleets (Proxmox/KVM) nested inside one rented box; the bare-metal BMC/IPMI management plane the guest
 cannot see; HPC batch schedulers (Slurm, PBS/LSF/SGE, managed cloud batch) used as compute arbitrage;
 macOS hosts (colos, hosted runners, launchd persistence); rented scanner fleets; a borrowed web
-server turned into somebody's phishing, kit and C2 host; and a vendor's GPU notebook sandbox, seen from
+server turned into somebody's phishing, kit and C2 host; a vendor's GPU notebook sandbox, seen from
 inside, where the tenant is handed root and the only guardrail is a mining string-match against one
-file — the one first-hand case here, with the platform's own poller and allowlist read from the guest
-side.
+file; a rented container sandbox that advertises 10 GB and leaves 2.1 TB writable through bind-mounted
+host paths; and the same sandbox with every capability in the kernel and nowhere to send the bytes,
+because its egress is a destination allowlist rather than a port filter. The last three are first-hand
+cases, measured from inside a tenant's own tenancy.
 
 **The evasion side** — why egress-only multiplexed TLS defeats network detection (no listener, CDN
 destination, one flow, 100–1000 byte padding, tiny per-host volume, legitimate binaries); the relay
