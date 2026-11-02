@@ -140,6 +140,29 @@ destinations, the tunnel edge *is* the disallowed destination, and no amount of 
 — the ClientHello carries the name the policy is looking for. The measured instance made this concrete:
 the tunnel API was reset while the tunnel vendor's marketing site, on the same CDN, answered `301`.
 
+## 4.1 The corollary that makes it airtight
+
+The same sandbox that will not let a byte leave to an arbitrary destination **lets the tenant bind any
+port it likes**:
+
+```console
+$ python3 -c 'socket bind on 127.0.0.1 for 80, 443, 8080, 2222'
+  bind 80: ok
+  bind 443: ok
+  bind 8080: ok
+  bind 2222: ok
+```
+
+and it resolves arbitrary names — `example.com`, `wikipedia.org`, `google.com` all answer, only the
+connection is reset. So the tenant can build an entire relay stack, take the port, serve whatever is
+locally reachable, and the kill is at the last hop with no visible cause inside the sandbox: the
+socket binds, the process runs, the destination simply resets.
+
+That is the shape of a control that is easy to mistake for brake failure. Anything the tenant checks
+locally — a bind, a listener, a DNS answer, a TCP connect — succeeds. Only the completed handshake
+fails, and only for destinations the platform chose. A squatter diagnosing this from inside will spend
+a long time on their own configuration before suspecting the path.
+
 ## 5. Corrections this implies elsewhere in the corpus
 
 - **[REPORT.md](../REPORT.md) §3.1** argues that "the network is clean for the tunnel family
