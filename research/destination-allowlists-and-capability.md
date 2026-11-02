@@ -146,7 +146,7 @@ destinations, the tunnel edge *is* the disallowed destination, and no amount of 
 — the ClientHello carries the name the policy is looking for. The measured instance made this concrete:
 the tunnel API was reset while the tunnel vendor's marketing site, on the same CDN, answered `301`.
 
-## 4.1 The corollary that makes it airtight
+### 4.1 The corollary that makes it airtight
 
 The same sandbox that will not let a byte leave to an arbitrary destination **lets the tenant bind any
 port it likes**:
@@ -200,13 +200,13 @@ allowlist deployment is whether it is a *name* list or an *IP* list. An IP list 
 fronting service on a shared CDN address; a name list is defeated only by a decoy SNI or by a host that
 happens to share an allowed name. Both are detectable, both are worth logging.
 
-## 6. Round two: what actually survives the allowlist
+## 7. Round two: what actually survives the allowlist
 
 A first pass concluded the sandbox was airtight and stopped there. It is not airtight; it is *narrow*.
 Pushing on the four channels that remained gives a much better picture of where this control actually
 fails.
 
-### 6.1 The policy reads the name and ignores the address
+### 7.1 The policy reads the name and ignores the address
 
 The cleanest test is to dial an address that cannot possibly serve the site and present an allowlisted
 name anyway:
@@ -230,7 +230,7 @@ Two consequences, and the second is the important one:
   stops being "can I reach my server" and becomes "can I get my payload under a name the platform
   trusts".
 
-### 6.2 The allowlist contains two of the largest user-content platforms on the internet
+### 7.2 The allowlist contains two of the largest user-content platforms on the internet
 
 `api.github.com`, `raw.githubusercontent.com` and `huggingface.co` all answer `200`:
 
@@ -251,7 +251,7 @@ This is the structural flaw in every "allow what the package manager needs" list
 needs the two biggest code-hosting platforms in the world, and those platforms host arbitrary
 user-controlled bytes.
 
-### 6.3 DNS is a channel the allowlist never touches
+### 7.3 DNS is a channel the allowlist never touches
 
 Direct reachability to a public resolver is blocked:
 
@@ -273,7 +273,7 @@ allow-lists ([REPORT.md](../REPORT.md) §5). The allowlist governs connections; 
 resolver's upstream, so a domain the squatter controls plus an authoritative nameserver is a full
 data channel that no TCP policy in this sandbox sees.
 
-### 6.4 What did not work
+### 7.4 What did not work
 
 - **The platform's own services do not proxy.** All four supervisor sockets answer `404` to `CONNECT`.
 - **A blocked name is blocked at every address.** Dialling GitHub's address with
@@ -282,7 +282,7 @@ data channel that no TCP policy in this sandbox sees.
   path, with or without an `Authorization` header — present, not open, and no attempt was made to find
   the credential shape it wants.
 
-### 6.5 What this means for the ranking
+### 7.5 What this means for the ranking
 
 The first pass ranked this sandbox "capability without reachability". The accurate statement is
 **capability with a narrow, name-based reachability**, and the ranking should be by what the allowlist
@@ -291,7 +291,7 @@ exfiltrating tenant's best-case environment; a list that includes only mirrors o
 packages is not. The difference is not the length of the list, it is whether any entry lets a user
 publish bytes.
 
-### 6.6 The resolver is a working bidirectional channel, demonstrated
+### 7.6 The resolver is a working bidirectional channel, demonstrated
 
 The DNS claim in §6.3 rested on "the query went out", which is weak. It can be made concrete without
 controlling a domain, because a wildcard service will echo whatever is in the label:
@@ -309,7 +309,7 @@ resolver, reached an authoritative nameserver, and the answer came back. That is
 carrying attacker-chosen data, on a channel no TCP policy in this sandbox observes. With a domain the
 squatter controls, the same path carries a command and a result per query.
 
-### 6.7 Plain HTTP is filtered too, and by the Host header
+### 7.7 Plain HTTP is filtered too, and by the Host header
 
 The obvious hope was that a name filter would miss cleartext, since there is no SNI to read. It does
 not:
@@ -325,7 +325,7 @@ Every non-allowlisted name returns `403`, on both the real address and an allowl
 proxy reads the `Host` header when there is no TLS. That is a better implementation than most: the
 control is name-based at both layers, so neither "use HTTP" nor "reuse an allowed IP" gets anywhere.
 
-### 6.8 Where red actually wins
+### 7.8 Where red actually wins
 
 Ranked by what they cost the platform, not by cleverness:
 
@@ -343,7 +343,7 @@ package-manager allowlist cannot remove: the resolver, and the code hosting the 
 sandbox is not airtight. It is narrow enough that the squatter has to spend an account and a domain to
 use it, which is a real cost and the right kind of cost, but it is not a wall.
 
-## 6.9 The allowlist is a TCP allowlist, and nobody said so
+### 7.9 The allowlist is a TCP allowlist, and nobody said so
 
 Everything in §6 characterises TCP. The same measurements over UDP and ICMP give a different control
 entirely, and the difference is the one thing a squatter would most want to know.
@@ -379,7 +379,7 @@ that amounts to a WAN depends on one controlled listener on UDP/3478 — and if 
 the classic one: a control that covers the protocol the operator thought of and not the ones they
 did not.
 
-### 6.10 A correction to this document's own earlier claim
+### 7.10 A correction to this document's own earlier claim
 
 An earlier revision said "no true WAN", on the strength of the TCP result. That was stated more
 strongly than the evidence supports, and this section exists because the correction matters: what was
@@ -387,7 +387,7 @@ measured is **no TCP WAN**, with UDP/3478 and all of ICMP untested as transports
 round of negative testing was reported as a closed question, which is the same failure mode this corpus
 criticises in probe tooling — a boolean where a protocol dimension was needed.
 
-## 7. What this does not prove
+## 9. What this does not prove
 
 - **That the reset comes from a proxy rather than the destination.** A consistent reset after
   ClientHello for a curated set of names, and success for its complement, is strong evidence of an
@@ -396,6 +396,61 @@ criticises in probe tooling — a boolean where a protocol dimension was needed.
 - **That `cloudflare.com` being allowed and `api.trycloudflare.com` not is deliberate.** It is
   consistent with a curated name list and also with a list that was built for package installs and
   happened to include one vendor's main site.
+
+## 10. Ten lanes, and what the control is actually made of
+
+The single-pass version of this document called the sandbox airtight. Ten independent lanes tested one
+hypothesis each against the same control. Seven held, one partially held, one worked, and two are
+outstanding. The value is less in the bypasses than in what the pattern of results says about the
+control's construction.
+
+| lane | verdict | the measurement that decided it |
+|---|---|---|
+| IPv6 / dual-stack | holds, **vacuously** | `disable_ipv6=1`; no global address, no RA, no route even after re-enabling with `CAP_NET_ADMIN`; every v6 destination dies at `ENETUNREACH` |
+| TLS ClientHello fragmentation | holds | ten split shapes, 0–4 s delays: blocked names reset, allowlisted names complete. A truncation sweep shows the filter holds a partial record open and fires on the exact completing byte (1552/1553 held, 1553 reset) |
+| Encrypted ClientHello | holds, **fails closed** | the same 86-byte handshake passes under `0x0a0a`, `0xfe0e`, `0x002f` and resets under `0xfe0d`; 0/1/1000-byte ECH bodies all reset; padding to 1498 B does not help. There is no state where the filter lacks a name it will trust |
+| Port agnosticism | holds | 144 dports: only 80 and 443 complete. An allowlisted name on 8080 times out; a blocked name on 443 resets |
+| Platform services as fetchers | holds (network) | the supervisor's four sockets 404 on `CONNECT`; the container's nft ruleset is empty, so the filter is outside and process-agnostic |
+| Allowlisted hosts as generic proxies | holds | no unauthenticated URL fetcher; the list **deliberately excludes** `*.github.io` and `*.hf.space` |
+| DNS as a transport | **works** | 253-char names, 122 labels, MX/TXT/NULL/DNSKEY forwarded, EDNS0 answers to 1325 B, ~33 q/s sequential (~540/s burst), **~39 kB/s aggregate ceiling** |
+| UDP / QUIC / ICMP | partial | QUIC dead on 443; **UDP 3478 and all ICMP open** |
+| Namespace and routing rewrites | see §8.1 | |
+| Raw sockets and malformed handshakes | see §8.1 | |
+
+### 10.1 What the results say about the construction
+
+Four independent lanes converge on the same mechanism, which is the most useful output of the
+exercise:
+
+1. **It is a terminating proxy, not a sniffer.** An allowlisted SNI dialled at TEST-NET-2
+   (`198.51.100.1`) returns GitHub's genuine `CN=github.com` certificate. The control reads the name
+   and dials it; it never forwards the tenant's bytes to the tenant's address.
+2. **It reassembles before it decides.** Fragmented and truncated ClientHellos are held open and
+   judged on the complete record, so packet-splitting evasion — the standard trick against a
+   packet-level middlebox — does nothing.
+3. **It fails closed on anything it cannot parse.** ECH, absent SNI, bare IP, plaintext on 443, a
+   malformed extension: every one resets. There is no "unknown, therefore allow" branch.
+4. **The decision is local and cheap.** The RST arrives in ~0.2 ms against ~2 ms for a real handshake,
+   consistent with a decision made on the ClientHello at the edge rather than after an upstream
+   round trip.
+
+That combination is why seven lanes held. It is also why the two that did not are the interesting
+ones — they are not weaknesses in the *name filter*, they are protocols the name filter was never
+applied to.
+
+### 10.2 The ranking that survives all ten lanes
+
+| route | status | cost to the squatter |
+|---|---|---|
+| DNS tunnel | **works**, ~39 kB/s | a domain and an authoritative nameserver |
+| UDP/3478 (STUN) | **open**, tunnel unproven | a controlled endpoint on 3478 |
+| ICMP | **open**, `ptunnel`-shaped | `CAP_NET_RAW`, which this box has |
+| GitHub / HF read | works | an account for the write direction |
+| ECH, fragmentation, IPv6, odd ports, `CONNECT`, raw malformed hello | closed | — |
+
+The control is real and it is well built. It is also **narrower than its own documentation of itself
+would suggest**, because it governs TCP and nothing else — and the corpus' tier list should say so
+before it says anything about flow heuristics.
 
 ## Sources
 
