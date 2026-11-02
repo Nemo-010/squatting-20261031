@@ -435,7 +435,11 @@ exercise:
    malformed extension: every one resets. There is no "unknown, therefore allow" branch.
 4. **The decision is local and cheap.** The RST arrives in ~0.2 ms against ~2 ms for a real handshake,
    consistent with a decision made on the ClientHello at the edge rather than after an upstream
-   round trip.
+   round trip. A silent connection is held and FINed at a fixed **15.00 s** — a local timer, and a
+   fingerprint of this particular appliance.
+5. **It reassembles, and it does not re-judge.** §10.4: a leading unparseable record is fatal even
+   when a valid allowed ClientHello follows it, and a second ClientHello in the same stream is not
+   re-evaluated. The first name is the only name.
 
 That combination is why seven lanes held. It is also why the two that did not are the interesting
 ones — they are not weaknesses in the *name filter*, they are protocols the name filter was never
