@@ -21,6 +21,10 @@ mounts), observed from a root shell inside the tenant's own container. No host a
   `/var/lib/rancher/rke2`.
 - All seven accept writes. A 2 GiB write to one of them runs at **1.9 GB/s**, and a 20 GiB
   `fallocate` succeeds.
+- The path is the least of it: `mount --bind` and `fuse-overlayfs` both work, so the tenant gets a
+  4 TB filesystem at a mountpoint of their choosing, and a build can redirect every write there.
+- There is **no `io.max`**: the sandbox has a byte quota and no rate ceiling, so filling the node
+  volume starves every other sandbox on it.
 - The list is not a platform quirk. It is a *template*: any container runtime deployment that mounts
   its data directories into the sandbox, or that uses `emptyDir` for a scratch path, hands over
   whatever volume backs them.
@@ -85,7 +89,64 @@ Each of those directories was empty at first look (`/var/lib/docker/containers` 
 other tenant's container metadata is exposed). Whether they are per-sandbox directories on a shared
 volume or genuinely shared host paths is not determinable from one sandbox — see the last section.
 
-## 2. Finding it in ten seconds
+## 2. From a path to a volume
+
+The measured case reads as though the tenant has to write to a path that looks like a mistake. It does
+not. A bind mount, or a FUSE overlay, turns the path into a filesystem with a name of the tenant's
+choosing, and nothing inside the sandbox can tell it from a volume the platform sold.
+
+```console
+$ mount --bind /var/lib/docker /mnt/storage2 && df -h /mnt/storage2 | tail -1
+/dev/mapper/mpatha  4.0T  1.9T  2.1T  47% /mnt/storage2
+
+$ fuse-overlayfs -o lowerdir=/,upperdir=/var/lib/docker/.upper,workdir=/var/lib/docker/.work /mnt/storage
+$ mountpoint -q /mnt/storage && echo MOUNTED
+MOUNTED
+```
+
+Both are `mount(2)` and both need `CAP_SYS_ADMIN`; this sandbox had all 41 capabilities, so both
+succeeded on the first attempt. The overlay variant is the more useful of the two, because it presents a
+*writable root* over any lower layer, which is what a build or a package install actually wants: the
+container's 10 GB `/` stops being the write target at all, and every write that would have filled it
+lands in the upper directory on the 4 TB volume instead.
+
+| mount | result here | note |
+|---|---|---|
+| `mount --bind /var/lib/docker /mnt/x` | works | simplest; no helper binary needed |
+| `fuse-overlayfs -o lowerdir=/,upperdir=…,workdir=… /mnt/x` | works | writable overlay, upper layer on the big volume |
+| `mount -t fuse …` by hand | refused | needs the `fusermount` helper; the syscall alone is not enough |
+| `unshare -Um` then mount | refused | user-namespace mounts denied even though `unshare -U` succeeds |
+| `/dev/kvm` | denied | device cgroup, not a capability |
+
+What the tenant ends up with is not "2.1 TB at an odd path" but "a 4 TB filesystem at `/storage`", and
+the difference matters for everything downstream: a package manager that refuses to install outside
+`/var/lib`, a build that hardcodes `/workspace`, a backup that walks named mountpoints. The declared
+quota never enters the conversation.
+
+Two operational details. The mount survives for the container's lifetime — the `fuse-overlayfs` process
+was still in `/proc/mounts` twenty minutes later, alongside eight fuse entries — and it dies with the
+container, so it is a storage vector and not a persistence one. And the overlay's upper directory is a
+plain directory on the bind, so its contents outlive an unmount of the overlay itself.
+
+### 2.1 No IO ceiling behind the quota
+
+```console
+$ cat /sys/fs/cgroup/io.max
+(empty)
+$ cat /sys/fs/cgroup/cgroup.controllers
+cpuset cpu io memory hugetlb pids rdma misc dmem
+```
+
+The cgroup exposes an `io` controller and sets no limit on it. So the sandbox has a storage ceiling in
+*bytes* (10 GB) and no rate ceiling at all on the volume behind the bind. A tenant can fill the node's
+shared volume until the node fills, which affects every other sandbox on it, and nothing per-container
+stops them.
+
+This is the more serious half of the finding for a platform, and it does not require any abuse at all:
+a legitimate build with a large cache does it by accident. The quota protects the tenant from
+themselves; it protects nobody else.
+
+## 3. Finding it in ten seconds
 
 The check is a comparison, not a scan: any mount whose capacity is materially larger than the root
 filesystem is memory, storage, or both that the platform did not intend to hand out.
@@ -111,7 +172,7 @@ done
 `checks/storage-reach.sh` in this repository is exactly that, with the writability test and the
 `--max` guard (it refuses to fill anything, it only reports).
 
-## 3. Where platforms leave host paths
+## 4. Where platforms leave host paths
 
 The pattern is generic. A sandbox that runs containers on a node, or that gives you a "workspace" with
 nested runtime access, will expose some of:
@@ -135,7 +196,7 @@ container as a single file.
 A squatter does not need any of these to be *empty*. They need one to be writable, and [§1](#1-the-measured-case)
 shows they do not need to be shared either.
 
-## 4. What the quota actually binds
+## 5. What the quota actually binds
 
 Nothing that a careless workload cares about, and everything that a careful one does.
 
@@ -176,12 +237,16 @@ by the device cgroup while `/dev/kmsg`, `/dev/net/tun` and `/dev/fuse` opened no
 right split, and it is worth stating because the visible inventory reads like a horror story until it
 is tested.
 
-## 5. The trick, stated as a play
+## 6. The trick, stated as a play
 
 1. **Read the mount table, not the quota.** `df -h`, then `/proc/self/mountinfo` filtered to non-pseudo
    filesystems. The number you were told is one line out of a dozen.
 2. **Prefer a writable bind over a writable tmpfs.** The bind is backed by disk the platform owns and
    does not attribute to you; a tmpfs is charged to your memory cgroup and will OOM you.
+2a. **Give it a name.** `mount --bind` the path, or build a `fuse-overlayfs` with its upper layer on
+   it, so the storage appears where the workload expects a volume. A build that hardcodes `/workspace`
+   or a package manager that refuses to write outside `/var/lib` will not use a path it was not told
+   about.
 3. **Write to the biggest, and clean up nothing.** Files under `/var/lib/docker` are invisible to
    anything that inspects the image or the overlay, which is what the platform's own tooling reads.
 4. **Keep the root filesystem pristine.** An empty `df /` is the difference between a container that
@@ -192,7 +257,7 @@ is tested.
 This is the same economics as the rest of this corpus, moved down a layer: the platform pays per node
 volume, the tenant is billed per container, and the difference is the margin.
 
-## 6. Detection
+## 7. Detection
 
 Three checks, cheapest first, and the first one is free because the data already exists.
 
@@ -212,12 +277,18 @@ for t in $(awk '{print $5}' /proc/self/mountinfo); do
 done
 ```
 
+**Bind mounts are visible to the tenant and should be visible to the platform.** Everything in §2
+leaves `mountinfo` entries: a container that has mounted a bind over a host path, or started a
+`fuse-overlayfs`, says so in `/proc/self/mountinfo` and in its process table. A platform that reads
+the mount table of the sandbox it is running has a perfect record of this, and one that does not is
+relying on the quota it already knows is bypassable.
+
 **Alert on an empty root and a full node.** In the measured case the container's overlay was `53M` used
 after twenty minutes of heavy work, and the node volume moved by gigabytes. That inversion — root flat,
 node volume climbing — is the signature, and no per-container byte counter will show it because the
 bytes never appear in the container's own filesystem.
 
-## 7. What this does not give you
+## 8. What this does not give you
 
 - **No host escape.** Device nodes existed and were denied; there was no path to the node's
   filesystem outside the mounted directories.
