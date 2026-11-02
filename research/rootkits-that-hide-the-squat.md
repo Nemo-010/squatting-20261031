@@ -418,6 +418,11 @@ this corpus' first case would find nothing. And zapper's `-a` did **not** rename
 it stayed `job.sh` — so its name-hiding is narrower than its README implies, while its argument
 redaction works.
 
+A design proposal for closing that gap in confmask — detach after the entry swap, implement
+`PR_SET_MM_ARG_START/END`, exact-size the argv region so the NUL ratio stops being a fingerprint, and
+stop naming the memfd after the tool — is filed upstream as
+[Nemo-010/confmask#29](https://github.com/Nemo-010/confmask/issues/29).
+
 The general rule this sharpens: **a detector keyed to a mechanism detects the tools that use that
 mechanism.** `TracerPid` catches supervisors; `comm`-versus-`exe` catches renames; absence-of-arguments
 catches redactors. No single line covers the class, which is why §7's recipe is a list rather than a
