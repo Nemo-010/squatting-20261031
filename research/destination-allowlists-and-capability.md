@@ -343,6 +343,50 @@ package-manager allowlist cannot remove: the resolver, and the code hosting the 
 sandbox is not airtight. It is narrow enough that the squatter has to spend an account and a domain to
 use it, which is a real cost and the right kind of cost, but it is not a wall.
 
+## 6.9 The allowlist is a TCP allowlist, and nobody said so
+
+Everything in §6 characterises TCP. The same measurements over UDP and ICMP give a different control
+entirely, and the difference is the one thing a squatter would most want to know.
+
+| protocol | result | note |
+|---|---|---|
+| TCP 80, 443 | name-checked, fails closed | 142 other dports do not even complete a handshake |
+| UDP 53 | answered by **one interceptor** for every address | byte-identical replies from `8.8.8.8`, `1.1.1.1`, `9.9.9.9` and the platform resolver |
+| **UDP 3478** | **genuine bidirectional traffic to an arbitrary host** | STUN binding succeeded 10/10 over 20 s, replies carrying the real mapped address |
+| UDP 123, 443, 5201, 5004 | silent | no reply, no ICMP unreachable |
+| **ICMP** | **echo works to every address tested** | `8.8.8.8`, `example.com`, `140.82.121.3` |
+| TCP 53 | blocked | so a name filter is not what stops DNS-over-TCP |
+
+Two consequences, and both are covert channels that this corpus' tier list does not rank:
+
+- **ICMP is unfiltered.** Echo request and reply to arbitrary addresses, payload intact. That is
+  `ptunnel`-shaped, and a host with `CAP_NET_RAW` needs nothing else.
+- **UDP 3478 is not filtered.** A STUN binding exchange is the cheapest possible proof that a UDP
+  datagram reaches a host of the platform's choosing and comes back; the mapping survived ten
+  exchanges across twenty seconds, which is more than opportunistic state.
+
+What this does **not** establish is a working tunnel. Two gaps, both stated rather than papered over:
+
+1. **No throughput measurement.** Public `iperf3` servers listen on 5201, and 5201 is silent in both
+   protocols here, so the sustained-rate test could not be run. UDP tunnel capacity is unknown.
+2. **STUN-shaped traffic is not the same as arbitrary traffic.** A middlebox that understands STUN on
+   3478 could be letting one handshake through and dropping application data. Distinguishing "UDP is
+   open on 3478" from "an ALG special-cases STUN on 3478" needs a controlled endpoint on that port,
+   which this survey did not have.
+
+So the honest ranking for this sandbox is: **TCP is a vetted allowlist, UDP and ICMP are not.** Whether
+that amounts to a WAN depends on one controlled listener on UDP/3478 — and if it does, the pattern is
+the classic one: a control that covers the protocol the operator thought of and not the ones they
+did not.
+
+### 6.10 A correction to this document's own earlier claim
+
+An earlier revision said "no true WAN", on the strength of the TCP result. That was stated more
+strongly than the evidence supports, and this section exists because the correction matters: what was
+measured is **no TCP WAN**, with UDP/3478 and all of ICMP untested as transports at the time. A single
+round of negative testing was reported as a closed question, which is the same failure mode this corpus
+criticises in probe tooling — a boolean where a protocol dimension was needed.
+
 ## 7. What this does not prove
 
 - **That the reset comes from a proxy rather than the destination.** A consistent reset after
